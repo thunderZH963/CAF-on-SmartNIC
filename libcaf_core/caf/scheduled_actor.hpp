@@ -45,6 +45,7 @@
 #include "caf/sec.hpp"
 #include "caf/stream_manager.hpp"
 #include "caf/telemetry/timer.hpp"
+#include "caf/defaults.hpp"
 
 namespace caf {
 

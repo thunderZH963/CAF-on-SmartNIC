@@ -8,6 +8,7 @@
 
 #include "caf/io/network/native_socket.hpp"
 #include "caf/logger.hpp"
+#include "caf/defaults.hpp"
 
 #ifdef CAF_WINDOWS
 #  include <winsock2.h>
@@ -50,6 +51,7 @@ tcp::read_some(size_t& result, native_socket fd, void* buf, size_t len) {
 rw_state
 tcp::write_some(size_t& result, native_socket fd, const void* buf, size_t len) {
   CAF_LOG_TRACE(CAF_ARG(fd) << CAF_ARG(len));
+  auto t1 = std::chrono::steady_clock::now();
   auto sres = ::send(fd, reinterpret_cast<io::network::socket_send_ptr>(buf),
                      len, no_sigpipe_io_flag);
   if (is_error(sres, true)) {
@@ -61,6 +63,10 @@ tcp::write_some(size_t& result, native_socket fd, const void* buf, size_t len) {
   }
   CAF_LOG_DEBUG(CAF_ARG(len) << CAF_ARG(fd) << CAF_ARG(sres));
   result = (sres > 0) ? static_cast<size_t>(sres) : 0;
+  auto t2 = std::chrono::steady_clock::now();
+  double interval = (double) (std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count())/1000000000.0;
+  printf("check write some: payload: %d; time: %lf sec; speed: %lf B/s; t1: %ld; t2: %ld\n", sres, interval, sres/interval, t1.time_since_epoch().count(), t2.time_since_epoch().count());
+  defaults::default_handler::buf_handler::getInstance().set_new_output(std::chrono::steady_clock::now(), sres);
   return rw_state::success;
 }
 

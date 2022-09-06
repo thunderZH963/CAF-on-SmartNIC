@@ -9,6 +9,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <mutex>
 
 #include "caf/detail/build_config.hpp"
 #include "caf/detail/log_level.hpp"
@@ -77,7 +78,8 @@ namespace caf::defaults::scheduler {
 
 constexpr auto policy = string_view{"stealing"};
 constexpr auto profiling_output_file = string_view{""};
-constexpr auto max_throughput = std::numeric_limits<size_t>::max();
+// constexpr auto max_throughput = std::numeric_limits<size_t>::max();
+constexpr auto max_throughput = 1;
 constexpr auto profiling_resolution = timespan(100'000'000);
 
 } // namespace caf::defaults::scheduler
@@ -119,3 +121,57 @@ constexpr auto cached_udp_buffers = size_t{10};
 constexpr auto max_pending_msgs = size_t{10};
 
 } // namespace caf::defaults::middleman
+
+namespace caf::defaults::default_handler {
+class CAF_CORE_EXPORT buf_handler {
+private:
+  // buf_handler();
+  // ~buf_handler();
+  buf_handler& operator=(const buf_handler &);
+  std::chrono::steady_clock::time_point input_time[2] = {std::chrono::steady_clock::now(), std::chrono::steady_clock::now()};
+  std::chrono::steady_clock::time_point output_time[2] = {std::chrono::steady_clock::now(), std::chrono::steady_clock::now()};
+  size_t input_payload{1};
+  size_t output_payload{1};
+  mutable std::mutex input_mtx_;
+  mutable std::mutex output_mtx_;
+
+public:
+  public:
+	static buf_handler& getInstance() {
+		static buf_handler instance;
+		return instance;
+  }
+
+  double get_input_speed() {
+    input_mtx_.lock();
+    auto interval = (double) (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - input_time[0]).count())/1000000000.0;
+    // printf("got input speed: %lf\n", input_payload / interval);
+    input_mtx_.unlock();
+    return input_payload / interval;
+  }
+
+  double get_output_speed() {
+    output_mtx_.lock();
+    auto interval = (double) (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - output_time[0]).count())/1000000000.0;
+    // printf("got output speed: %lf\n", output_payload / interval);
+    output_mtx_.unlock();
+    return output_payload / interval;
+  }
+
+  void set_new_input(std::chrono::steady_clock::time_point t, size_t payload) {
+    input_mtx_.lock();
+    input_time[0] = input_time[1];
+    input_time[1] = t;
+    input_payload = payload;
+    input_mtx_.unlock();
+  }
+
+  void set_new_output(std::chrono::steady_clock::time_point t, size_t payload) {
+    output_mtx_.lock();
+    output_time[0] = output_time[1];
+    output_time[1] = t;
+    output_payload = payload;
+    output_mtx_.unlock();
+  }
+}; 
+}

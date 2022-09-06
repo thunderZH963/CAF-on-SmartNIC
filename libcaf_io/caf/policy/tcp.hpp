@@ -7,6 +7,7 @@
 #include "caf/detail/io_export.hpp"
 #include "caf/io/network/native_socket.hpp"
 #include "caf/io/network/rw_state.hpp"
+#include "caf/defaults.hpp"
 
 namespace caf::policy {
 

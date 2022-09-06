@@ -376,6 +376,7 @@ resumable::resume_result scheduled_actor::resume(execution_unit* ctx,
   std::vector<stream_manager*> managers;
   mailbox_element_ptr ptr;
   while (consumed < max_throughput) {
+  // while (defaults::default_handler::buf_handler::getInstance().get_input_speed() < 4096*defaults::default_handler::buf_handler::getInstance().get_output_speed()) {
     CAF_LOG_DEBUG("start new DRR round");
     mailbox_.fetch_more();
     auto prev = consumed; // Caches the value before processing more.
