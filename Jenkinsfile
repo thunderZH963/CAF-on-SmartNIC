@@ -32,12 +32,7 @@ config = [
             tags: ['docker'],
             builds: ['release'],
         ]],
-        ['centos-8', [
-            numCores: 4,
-            tags: ['docker'],
-            builds: ['release'],
-        ]],
-        ['debian-9', [
+        ['almalinux-8', [
             numCores: 4,
             tags: ['docker'],
             builds: ['release'],
@@ -47,7 +42,7 @@ config = [
             tags: ['docker'],
             builds: ['release'],
         ]],
-        ['ubuntu-16.04', [
+        ['debian-11', [
             numCores: 4,
             tags: ['docker'],
             builds: ['release'],
@@ -62,12 +57,17 @@ config = [
             tags: ['docker'],
             builds: ['release'],
         ]],
-        ['fedora-33', [
+        ['ubuntu-22.04', [
             numCores: 4,
             tags: ['docker'],
             builds: ['release'],
         ]],
-        ['fedora-34', [
+        ['fedora-35', [
+            numCores: 4,
+            tags: ['docker'],
+            builds: ['release'],
+        ]],
+        ['fedora-36', [
             numCores: 4,
             tags: ['docker'],
             builds: ['release'],
@@ -83,7 +83,7 @@ config = [
             ],
         ]],
         // One extra debug build for leak checking.
-        ['fedora-34', [
+        ['fedora-36', [
             numCores: 4,
             tags: ['docker', 'LeakSanitizer'],
             builds: ['debug'],
@@ -95,7 +95,7 @@ config = [
             ],
         ]],
         // One extra debug build with static libs, UBSan and hardening flags.
-        ['fedora-34', [
+        ['fedora-36', [
             numCores: 4,
             tags: ['docker', 'UBSanitizer'],
             builds: ['debug'],
@@ -115,9 +115,9 @@ config = [
             extraBuildFlags: [
                 'CAF_ENABLE_CURL_EXAMPLES:BOOL=ON',
                 'CAF_ENABLE_PROTOBUF_EXAMPLES:BOOL=ON',
-                'CAF_ENABLE_QT5_EXAMPLES:BOOL=ON',
+                'CAF_ENABLE_QT6_EXAMPLES:BOOL=ON',
                 'OPENSSL_ROOT_DIR:PATH=/usr/local/opt/openssl',
-                'Qt5_DIR:PATH=/usr/local/opt/qt/lib/cmake/Qt5',
+                'Qt6_DIR:PATH=/usr/local/opt/qt/lib/cmake/Qt6',
             ],
             extraDebugBuildFlags: [
                 'CAF_SANITIZERS:STRING=address',
@@ -126,8 +126,10 @@ config = [
         ['FreeBSD', [
             numCores: 4,
             builds: ['debug', 'release'],
-            extraBuildFlags: [
+            extraDebugBuildFlags: [
                 'CAF_SANITIZERS:STRING=address',
+                // Deadlocks on FreeBSD in CRYPTO_THREAD_run_once under ASAN.
+                'CAF_EXCLUDE_TESTS:STRING=net.ssl.transport'
             ],
         ]],
         // Non-UNIX systems.
@@ -165,26 +167,6 @@ pipeline {
             agent { label 'clang-format' }
             steps {
                 runClangFormat(config)
-            }
-        }
-        stage('Check Consistency') {
-            agent { label 'unix' }
-            steps {
-                deleteDir()
-                unstash('sources')
-                dir('sources') {
-                    cmakeBuild([
-                        buildDir: 'build',
-                        installation: 'cmake in search path',
-                        sourceDir: '.',
-                        cmakeArgs: '-DCAF_ENABLE_IO_MODULE:BOOL=OFF ' +
-                                   '-DCAF_ENABLE_UTILITY_TARGETS:BOOL=ON',
-                        steps: [[
-                            args: '--target consistency-check',
-                            withCmake: true,
-                        ]],
-                    ])
-                }
             }
         }
         stage('Build') {

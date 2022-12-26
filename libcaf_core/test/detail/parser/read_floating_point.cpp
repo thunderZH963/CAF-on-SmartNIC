@@ -6,13 +6,13 @@
 
 #include "caf/detail/parser/read_floating_point.hpp"
 
-#include "caf/test/dsl.hpp"
+#include "core-test.hpp"
 
 #include <string>
+#include <string_view>
+#include <variant>
 
 #include "caf/parser_state.hpp"
-#include "caf/string_view.hpp"
-#include "caf/variant.hpp"
 
 using namespace caf;
 
@@ -28,63 +28,63 @@ struct double_consumer {
   double x;
 };
 
-optional<double> read(string_view str) {
+std::optional<double> read(std::string_view str) {
   double_consumer consumer;
   string_parser_state ps{str.begin(), str.end()};
   detail::parser::read_floating_point(ps, consumer);
   if (ps.code != pec::success)
-    return none;
+    return std::nullopt;
   return consumer.x;
 }
 
 } // namespace
 
 CAF_TEST(predecimal only) {
-  CAF_CHECK_EQUAL(read("0"), 0.);
-  CAF_CHECK_EQUAL(read("+0"), 0.);
-  CAF_CHECK_EQUAL(read("-0"), 0.);
-  CAF_CHECK_EQUAL(read("1"), 1.);
-  CAF_CHECK_EQUAL(read("+1"), 1.);
-  CAF_CHECK_EQUAL(read("-1"), -1.);
-  CAF_CHECK_EQUAL(read("12"), 12.);
-  CAF_CHECK_EQUAL(read("+12"), 12.);
-  CAF_CHECK_EQUAL(read("-12"), -12.);
+  CHECK_EQ(read("0"), 0.);
+  CHECK_EQ(read("+0"), 0.);
+  CHECK_EQ(read("-0"), 0.);
+  CHECK_EQ(read("1"), 1.);
+  CHECK_EQ(read("+1"), 1.);
+  CHECK_EQ(read("-1"), -1.);
+  CHECK_EQ(read("12"), 12.);
+  CHECK_EQ(read("+12"), 12.);
+  CHECK_EQ(read("-12"), -12.);
 }
 
 CAF_TEST(trailing dot) {
-  CAF_CHECK_EQUAL(read("0."), 0.);
-  CAF_CHECK_EQUAL(read("1."), 1.);
-  CAF_CHECK_EQUAL(read("+1."), 1.);
-  CAF_CHECK_EQUAL(read("-1."), -1.);
-  CAF_CHECK_EQUAL(read("12."), 12.);
-  CAF_CHECK_EQUAL(read("+12."), 12.);
-  CAF_CHECK_EQUAL(read("-12."), -12.);
+  CHECK_EQ(read("0."), 0.);
+  CHECK_EQ(read("1."), 1.);
+  CHECK_EQ(read("+1."), 1.);
+  CHECK_EQ(read("-1."), -1.);
+  CHECK_EQ(read("12."), 12.);
+  CHECK_EQ(read("+12."), 12.);
+  CHECK_EQ(read("-12."), -12.);
 }
 
 CAF_TEST(leading dot) {
-  CAF_CHECK_EQUAL(read(".0"), .0);
-  CAF_CHECK_EQUAL(read(".1"), .1);
-  CAF_CHECK_EQUAL(read("+.1"), .1);
-  CAF_CHECK_EQUAL(read("-.1"), -.1);
-  CAF_CHECK_EQUAL(read(".12"), .12);
-  CAF_CHECK_EQUAL(read("+.12"), .12);
-  CAF_CHECK_EQUAL(read("-.12"), -.12);
+  CHECK_EQ(read(".0"), .0);
+  CHECK_EQ(read(".1"), .1);
+  CHECK_EQ(read("+.1"), .1);
+  CHECK_EQ(read("-.1"), -.1);
+  CHECK_EQ(read(".12"), .12);
+  CHECK_EQ(read("+.12"), .12);
+  CHECK_EQ(read("-.12"), -.12);
 }
 
 CAF_TEST(regular noation) {
-  CAF_CHECK_EQUAL(read("0.0"), .0);
-  CAF_CHECK_EQUAL(read("1.2"), 1.2);
-  CAF_CHECK_EQUAL(read("1.23"), 1.23);
-  CAF_CHECK_EQUAL(read("12.34"), 12.34);
+  CHECK_EQ(read("0.0"), .0);
+  CHECK_EQ(read("1.2"), 1.2);
+  CHECK_EQ(read("1.23"), 1.23);
+  CHECK_EQ(read("12.34"), 12.34);
 }
 
 CAF_TEST(scientific noation) {
-  CAF_CHECK_EQUAL(read("1e2"), 1e2);
-  CAF_CHECK_EQUAL(read("+1e2"), 1e2);
-  CAF_CHECK_EQUAL(read("+1e+2"), 1e2);
-  CAF_CHECK_EQUAL(read("-1e2"), -1e2);
-  CAF_CHECK_EQUAL(read("-1e+2"), -1e2);
-  CAF_CHECK_EQUAL(read("12e-3"), 12e-3);
-  CAF_CHECK_EQUAL(read("+12e-3"), 12e-3);
-  CAF_CHECK_EQUAL(read("-12e-3"), -12e-3);
+  CHECK_EQ(read("1e2"), 1e2);
+  CHECK_EQ(read("+1e2"), 1e2);
+  CHECK_EQ(read("+1e+2"), 1e2);
+  CHECK_EQ(read("-1e2"), -1e2);
+  CHECK_EQ(read("-1e+2"), -1e2);
+  CHECK_EQ(read("12e-3"), 12e-3);
+  CHECK_EQ(read("+12e-3"), 12e-3);
+  CHECK_EQ(read("-12e-3"), -12e-3);
 }

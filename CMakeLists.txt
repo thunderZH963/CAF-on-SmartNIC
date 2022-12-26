@@ -21,20 +21,21 @@ option(THREADS_PREFER_PTHREAD_FLAG "Prefer -pthread flag if available " ON)
 
 # -- CAF options that are off by default ---------------------------------------
 
+option(CAF_ENABLE_ACTOR_PROFILER "Enable experimental profiler API" OFF)
+option(CAF_ENABLE_CPACK "Enable packaging via CPack" OFF)
 option(CAF_ENABLE_CURL_EXAMPLES "Build examples with libcurl" OFF)
 option(CAF_ENABLE_PROTOBUF_EXAMPLES "Build examples with Google Protobuf" OFF)
-option(CAF_ENABLE_QT5_EXAMPLES "Build examples with the Qt5 framework" OFF)
+option(CAF_ENABLE_QT6_EXAMPLES "Build examples with the Qt6 framework" OFF)
 option(CAF_ENABLE_RUNTIME_CHECKS "Build CAF with extra runtime assertions" OFF)
-option(CAF_ENABLE_UTILITY_TARGETS "Include targets like consistency-check" OFF)
-option(CAF_ENABLE_ACTOR_PROFILER "Enable experimental profiler API" OFF)
 
 # -- CAF options that are on by default ----------------------------------------
 
 option(CAF_ENABLE_EXAMPLES "Build small programs showcasing CAF features" ON)
-option(CAF_ENABLE_IO_MODULE "Build networking I/O module" ON)
+option(CAF_ENABLE_EXCEPTIONS "Build CAF with support for exceptions" ON)
+option(CAF_ENABLE_IO_MODULE "Build legacy networking I/O module" ON)
+option(CAF_ENABLE_NET_MODULE "Build networking I/O module" ON)
 option(CAF_ENABLE_TESTING "Build unit test suites" ON)
 option(CAF_ENABLE_TOOLS "Build utility programs such as caf-run" ON)
-option(CAF_ENABLE_EXCEPTIONS "Build CAF with support for exceptions" ON)
 
 # -- CAF options that depend on others -----------------------------------------
 
@@ -44,6 +45,7 @@ cmake_dependent_option(CAF_ENABLE_OPENSSL_MODULE "Build OpenSSL module" ON
 # -- CAF options with non-boolean values ---------------------------------------
 
 set(CAF_LOG_LEVEL "QUIET" CACHE STRING "Set log verbosity of CAF components")
+set(CAF_EXCLUDE_TESTS "" CACHE STRING "List of excluded test suites")
 set(CAF_SANITIZERS "" CACHE STRING
     "Comma separated sanitizers, e.g., 'address,undefined'")
 set(CAF_BUILD_INFO_FILE_PATH "" CACHE FILEPATH
@@ -74,6 +76,14 @@ if(MSVC AND CAF_SANITIZERS)
   message(FATAL_ERROR "Sanitizer builds are currently not supported on MSVC")
 endif()
 
+# -- get dependencies that are used in more than one module --------------------
+
+if(CAF_ENABLE_OPENSSL_MODULE OR CAF_ENABLE_NET_MODULE)
+  if(NOT TARGET OpenSSL::SSL OR NOT TARGET OpenSSL::Crypto)
+    find_package(OpenSSL REQUIRED)
+  endif()
+endif()
+
 # -- base target setup ---------------------------------------------------------
 
 # This target propagates compiler flags, extra dependencies, etc. All other CAF
@@ -93,6 +103,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_compile_options(caf_internal INTERFACE
                            -Wno-missing-field-initializers)
   endif()
+elseif(MSVC)
+  target_compile_options(caf_internal INTERFACE /EHsc)
 endif()
 
 # -- unit testing setup / caf_add_test_suites function  ------------------------
@@ -101,11 +113,13 @@ if(CAF_ENABLE_TESTING)
   enable_testing()
   function(caf_add_test_suites target)
     foreach(suiteName ${ARGN})
-      string(REPLACE "." "/" suitePath ${suiteName})
-      target_sources(${target} PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/test/${suitePath}.cpp")
-      add_test(NAME ${suiteName}
-               COMMAND ${target} -r300 -n -v5 -s "^${suiteName}$")
+      if(NOT ${suiteName} IN_LIST CAF_EXCLUDE_TESTS)
+        string(REPLACE "." "/" suitePath ${suiteName})
+        target_sources(${target} PRIVATE
+          "${CMAKE_CURRENT_SOURCE_DIR}/test/${suitePath}.cpp")
+        add_test(NAME ${suiteName}
+                 COMMAND ${target} -r300 -n -v5 -s "^${suiteName}$")
+      endif()
     endforeach()
   endfunction()
 endif()
@@ -204,50 +218,23 @@ if(NOT TARGET uninstall)
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/uninstall.cmake)
 endif()
 
-# -- utility targets -----------------------------------------------------------
-
-if(CAF_ENABLE_UTILITY_TARGETS)
-  add_executable(caf-generate-enum-strings
-                 EXCLUDE_FROM_ALL
-                 cmake/caf-generate-enum-strings.cpp)
-  target_link_libraries(caf-generate-enum-strings PRIVATE CAF::internal)
-  add_custom_target(consistency-check)
-  add_custom_target(update-enum-strings)
-  # adds a consistency check that verifies that `cpp_file` is still valid by
-  # re-generating the file and comparing it to the existing file
-  function(caf_add_enum_consistency_check hpp_file cpp_file)
-    set(input "${CMAKE_CURRENT_SOURCE_DIR}/${hpp_file}")
-    set(file_under_test "${CMAKE_CURRENT_SOURCE_DIR}/${cpp_file}")
-    set(output "${CMAKE_CURRENT_BINARY_DIR}/check/${cpp_file}")
-    get_filename_component(output_dir "${output}" DIRECTORY)
-    file(MAKE_DIRECTORY "${output_dir}")
-    add_custom_command(OUTPUT "${output}"
-                       COMMAND caf-generate-enum-strings "${input}" "${output}"
-                       DEPENDS caf-generate-enum-strings "${input}")
-    get_filename_component(target_name "${input}" NAME_WE)
-    add_custom_target("${target_name}"
-                      COMMAND
-                        "${CMAKE_COMMAND}"
-                        "-Dfile_under_test=${file_under_test}"
-                        "-Dgenerated_file=${output}"
-                        -P "${PROJECT_SOURCE_DIR}/cmake/check-consistency.cmake"
-                      DEPENDS "${output}")
-    add_dependencies(consistency-check "${target_name}")
-    add_custom_target("${target_name}-update"
-                      COMMAND
-                        caf-generate-enum-strings
-                        "${input}"
-                        "${file_under_test}"
-                       DEPENDS caf-generate-enum-strings "${input}")
-    add_dependencies(update-enum-strings "${target_name}-update")
-  endfunction()
-else()
-  function(caf_add_enum_consistency_check hpp_file cpp_file)
-    # nop
-  endfunction()
-endif()
-
 # -- utility functions ---------------------------------------------------------
+
+# generates the implementation file for the enum that contains to_string,
+# from_string and from_integer
+function(caf_add_enum_type target enum_name)
+  string(REPLACE "." "/" path "${enum_name}")
+  set(hpp_file "${CMAKE_CURRENT_SOURCE_DIR}/caf/${path}.hpp")
+  set(cpp_file "${CMAKE_CURRENT_BINARY_DIR}/src/${path}_strings.cpp")
+  set(gen_file "${PROJECT_SOURCE_DIR}/cmake/caf-generate-enum-strings.cmake")
+  add_custom_command(OUTPUT "${cpp_file}"
+                     COMMAND ${CMAKE_COMMAND}
+                       "-DINPUT_FILE=${hpp_file}"
+                       "-DOUTPUT_FILE=${cpp_file}"
+                       -P "${gen_file}"
+                     DEPENDS "${hpp_file}" "${gen_file}")
+  target_sources(${target} PRIVATE "${cpp_file}")
+endfunction()
 
 function(caf_export_and_install_lib component)
   add_library(CAF::${component} ALIAS libcaf_${component})
@@ -328,8 +315,7 @@ endfunction()
 #     ...
 # )
 function(caf_add_component name)
-  set(varargs DEPENDENCIES HEADERS SOURCES TEST_SOURCES TEST_SUITES
-              ENUM_CONSISTENCY_CHECKS)
+  set(varargs DEPENDENCIES HEADERS SOURCES TEST_SOURCES TEST_SUITES ENUM_TYPES)
   cmake_parse_arguments(CAF_ADD_COMPONENT "" "" "${varargs}" ${ARGN})
   if(NOT CAF_ADD_COMPONENT_HEADERS)
     message(FATAL_ERROR "Cannot add CAF component without at least one header.")
@@ -344,17 +330,18 @@ function(caf_add_component name)
   endforeach()
   set(pub_lib_target "libcaf_${name}")
   set(obj_lib_target "libcaf_${name}_obj")
-  set(tst_bin_target "caf-${name}-test")
+  set(targets ${pub_lib_target} ${obj_lib_target})
+  add_library(${obj_lib_target} OBJECT
+              ${CAF_ADD_COMPONENT_HEADERS} ${CAF_ADD_COMPONENT_SOURCES})
+  set_property(TARGET ${obj_lib_target} PROPERTY POSITION_INDEPENDENT_CODE ON)
+  caf_target_link_libraries(${obj_lib_target}
+                            ${CAF_ADD_COMPONENT_DEPENDENCIES})
+  add_library(${pub_lib_target}
+              "${PROJECT_SOURCE_DIR}/cmake/dummy.cpp"
+              $<TARGET_OBJECTS:${obj_lib_target}>)
   if(CAF_ENABLE_TESTING AND CAF_ADD_COMPONENT_TEST_SOURCES)
-    set(targets ${pub_lib_target} ${obj_lib_target} ${tst_bin_target})
-    add_library(${obj_lib_target} OBJECT
-                ${CAF_ADD_COMPONENT_HEADERS} ${CAF_ADD_COMPONENT_SOURCES})
-    set_property(TARGET ${obj_lib_target} PROPERTY POSITION_INDEPENDENT_CODE ON)
-    caf_target_link_libraries(${obj_lib_target}
-                              ${CAF_ADD_COMPONENT_DEPENDENCIES})
-    add_library(${pub_lib_target}
-                "${PROJECT_SOURCE_DIR}/cmake/dummy.cpp"
-                $<TARGET_OBJECTS:${obj_lib_target}>)
+    set(tst_bin_target "caf-${name}-test")
+    list(APPEND targets ${tst_bin_target})
     add_executable(${tst_bin_target}
                    ${CAF_ADD_COMPONENT_TEST_SOURCES}
                    $<TARGET_OBJECTS:${obj_lib_target}>)
@@ -365,13 +352,17 @@ function(caf_add_component name)
     if(CAF_ADD_COMPONENT_TEST_SUITES)
       caf_add_test_suites(${tst_bin_target} ${CAF_ADD_COMPONENT_TEST_SUITES})
     endif()
-  else()
-    set(targets ${pub_lib_target})
-    add_library(${pub_lib_target}
-                ${CAF_ADD_COMPONENT_HEADERS} ${CAF_ADD_COMPONENT_SOURCES})
-    set_property(TARGET ${pub_lib_target} PROPERTY POSITION_INDEPENDENT_CODE ON)
   endif()
   target_link_libraries(${pub_lib_target} ${CAF_ADD_COMPONENT_DEPENDENCIES})
+  if(CAF_ADD_COMPONENT_ENUM_TYPES)
+    foreach(enum_name ${CAF_ADD_COMPONENT_ENUM_TYPES})
+      if(obj_lib_target)
+        caf_add_enum_type(${obj_lib_target} ${enum_name})
+      else()
+        caf_add_enum_type(${pub_lib_target} ${enum_name})
+      endif()
+    endforeach()
+  endif()
   foreach(target ${targets})
     target_compile_definitions(${target} PRIVATE "libcaf_${name}_EXPORTS")
     target_include_directories(${target} PRIVATE
@@ -384,18 +375,15 @@ function(caf_add_component name)
     endif()
   endforeach()
   caf_export_and_install_lib(${name})
-  if(CAF_ADD_COMPONENT_ENUM_CONSISTENCY_CHECKS)
-    foreach(enum_name ${CAF_ADD_COMPONENT_ENUM_CONSISTENCY_CHECKS})
-      string(REPLACE "." "/" path "${enum_name}")
-      caf_add_enum_consistency_check("caf/${path}.hpp"
-                                     "src/${path}_strings.cpp")
-    endforeach()
-  endif()
 endfunction()
 
 # -- build all components the user asked for -----------------------------------
 
 add_subdirectory(libcaf_core)
+
+if(CAF_ENABLE_NET_MODULE)
+  add_subdirectory(libcaf_net)
+endif()
 
 if(CAF_ENABLE_IO_MODULE)
   add_subdirectory(libcaf_io)
@@ -470,4 +458,26 @@ if(CAF_BUILD_INFO_FILE_PATH)
   configure_file("${PROJECT_SOURCE_DIR}/cmake/caf-build-info.txt.in"
                  "${CAF_BUILD_INFO_FILE_PATH}"
                  @ONLY)
+endif()
+
+# -- CPack setup ---------------------------------------------------------------
+
+if(CAF_ENABLE_CPACK)
+  include(InstallRequiredSystemLibraries)
+  set(CPACK_PACKAGE_NAME "CAF")
+  set(CPACK_PACKAGE_VENDOR "CAF Community")
+  set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+  set(CPACK_PACKAGE_VERSION_MAJOR "${CAF_VERSION_MAJOR}")
+  set(CPACK_PACKAGE_VERSION_MINOR "${CAF_VERSION_MINOR}")
+  set(CPACK_PACKAGE_VERSION_PATCH "${CAF_VERSION_PATCH}")
+  set(CPACK_PACKAGE_DESCRIPTION
+      "To learn more about CAF, please visit https://www.actor-framework.org.")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+        "CAF offers high-level building blocks for concurrency & distribution.")
+  set(CPACK_PACKAGE_HOMEPAGE_URL "https://www.actor-framework.org")
+  set(CPACK_PACKAGE_ICON "${PROJECT_SOURCE_DIR}/doc/png/logo-1000x1000.png")
+  if(NOT CPACK_SOURCE_GENERATOR)
+    set(CPACK_SOURCE_GENERATOR "TGZ")
+  endif()
+  include(CPack)
 endif()

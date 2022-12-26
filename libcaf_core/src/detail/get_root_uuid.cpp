@@ -45,6 +45,32 @@ std::string get_root_uuid() {
 } // namespace detail
 } // namespace caf
 
+#elif defined(CAF_IOS) || defined(CAF_ANDROID) || defined(CAF_NET_BSD)
+
+// Return a randomly-generated UUID on mobile devices or NetBSD (requires root
+// access to get UUID from disk).
+
+#  include <random>
+
+namespace caf {
+namespace detail {
+
+std::string get_root_uuid() {
+  std::random_device rd;
+  std::uniform_int_distribution<int> dist(0, 15);
+  std::string uuid = uuid_format;
+  for (auto& c : uuid) {
+    if (c != '-') {
+      auto n = dist(rd);
+      c = static_cast<char>((n < 10) ? n + '0' : (n - 10) + 'A');
+    }
+  }
+  return uuid;
+}
+
+} // namespace detail
+} // namespace caf
+
 #elif defined(CAF_LINUX) || defined(CAF_BSD) || defined(CAF_CYGWIN)
 
 #  include <algorithm>
@@ -65,8 +91,13 @@ namespace caf::detail {
 
 namespace {
 
-struct columns_iterator
-  : std::iterator<std::forward_iterator_tag, vector<string>> {
+struct columns_iterator {
+  using iterator_category = std::forward_iterator_tag;
+  using value_type = std::vector<string>;
+  using difference_type = ptrdiff_t;
+  using pointer = value_type*;
+  using reference = value_type&;
+
   columns_iterator(ifstream* s = nullptr) : fs(s) {
     // nop
   }
@@ -101,11 +132,12 @@ std::string get_root_uuid() {
   ifstream fs;
   fs.open("/etc/fstab", std::ios_base::in);
   columns_iterator end;
-  auto i = find_if(columns_iterator{&fs}, end, [](const vector<string>& cols) {
-    return cols.size() == 6 && cols[1] == "/";
-  });
+  auto i = std::find_if(columns_iterator{&fs}, end,
+                        [](const vector<string>& cols) {
+                          return cols.size() == 6 && cols[1] == "/";
+                        });
   if (i != end) {
-    uuid = move((*i)[0]);
+    uuid = std::move((*i)[0]);
     const char cstr[] = {"UUID="};
     auto slen = sizeof(cstr) - 1;
     if (uuid.compare(0, slen, cstr) == 0) {
@@ -113,7 +145,7 @@ std::string get_root_uuid() {
     }
     // UUIDs are formatted as 8-4-4-4-12 hex digits groups
     auto cpy = uuid;
-    replace_if(cpy.begin(), cpy.end(), ::isxdigit, 'F');
+    std::replace_if(cpy.begin(), cpy.end(), ::isxdigit, 'F');
     // discard invalid UUID
     if (cpy != uuid_format) {
       uuid.clear();
@@ -184,31 +216,6 @@ std::string get_root_uuid() {
           }
         }
       }
-    }
-  }
-  return uuid;
-}
-
-} // namespace detail
-} // namespace caf
-
-#elif defined(CAF_IOS) || defined(CAF_ANDROID)
-
-// return a randomly-generated UUID on mobile devices
-
-#  include <random>
-
-namespace caf {
-namespace detail {
-
-std::string get_root_uuid() {
-  std::random_device rd;
-  std::uniform_int_distribution<int> dist(0, 15);
-  std::string uuid = uuid_format;
-  for (auto& c : uuid) {
-    if (c != '-') {
-      auto n = dist(rd);
-      c = static_cast<char>((n < 10) ? n + '0' : (n - 10) + 'A');
     }
   }
   return uuid;

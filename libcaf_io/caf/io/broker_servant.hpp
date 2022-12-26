@@ -32,12 +32,12 @@ public:
   }
 
   void halt() {
-    activity_tokens_ = none;
+    activity_tokens_ = std::nullopt;
     this->remove_from_loop();
   }
 
   void trigger() {
-    activity_tokens_ = none;
+    activity_tokens_ = std::nullopt;
     this->add_to_loop();
   }
 
@@ -50,7 +50,7 @@ public:
     this->add_to_loop();
   }
 
-  optional<size_t> activity_tokens() const {
+  std::optional<size_t> activity_tokens() const {
     return activity_tokens_;
   }
 
@@ -83,7 +83,7 @@ protected:
         return false;
       // tell broker it entered passive mode, this can result in
       // producing, why we check the condition again afterwards
-      using passiv_t = typename std::conditional<
+      using passive_t = typename std::conditional<
         std::is_same<handle_type, connection_handle>::value,
         connection_passivated_msg,
         typename std::conditional<
@@ -92,7 +92,7 @@ protected:
           datagram_servant_passivated_msg>::type>::type;
       mailbox_element tmp{strong_actor_ptr{}, make_message_id(),
                           mailbox_element::forwarding_stack{},
-                          make_message(passiv_t{hdl()})};
+                          make_message(passive_t{hdl()})};
       invoke_mailbox_element_impl(ctx, tmp);
       return activity_tokens_ != size_t{0};
     }
@@ -105,7 +105,7 @@ protected:
 
   handle_type hdl_;
   mailbox_element value_;
-  optional<size_t> activity_tokens_;
+  std::optional<size_t> activity_tokens_;
 };
 
 } // namespace caf::io

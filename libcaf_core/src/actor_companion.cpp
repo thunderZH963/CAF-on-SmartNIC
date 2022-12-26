@@ -2,7 +2,6 @@
 // the main distribution directory for license terms and copyright or visit
 // https://github.com/actor-framework/actor-framework/blob/master/LICENSE.
 
-#include "caf/locks.hpp"
 #include "caf/actor_companion.hpp"
 
 namespace caf {
@@ -16,7 +15,7 @@ actor_companion::~actor_companion() {
 }
 
 void actor_companion::on_enqueue(enqueue_handler handler) {
-  std::lock_guard<lock_type> guard(lock_);
+  std::lock_guard guard{lock_};
   on_enqueue_ = std::move(handler);
 }
 
@@ -24,17 +23,21 @@ void actor_companion::on_exit(on_exit_handler handler) {
   on_exit_ = std::move(handler);
 }
 
-void actor_companion::enqueue(mailbox_element_ptr ptr, execution_unit*) {
+bool actor_companion::enqueue(mailbox_element_ptr ptr, execution_unit*) {
   CAF_ASSERT(ptr);
-  shared_lock<lock_type> guard(lock_);
-  if (on_enqueue_)
+  std::shared_lock guard{lock_};
+  if (on_enqueue_) {
     on_enqueue_(std::move(ptr));
+    return true;
+  } else {
+    return false;
+  }
 }
 
-void actor_companion::enqueue(strong_actor_ptr src, message_id mid,
+bool actor_companion::enqueue(strong_actor_ptr src, message_id mid,
                               message content, execution_unit* eu) {
   auto ptr = make_mailbox_element(std::move(src), mid, {}, std::move(content));
-  enqueue(std::move(ptr), eu);
+  return enqueue(std::move(ptr), eu);
 }
 
 void actor_companion::launch(execution_unit*, bool, bool hide) {
@@ -45,7 +48,7 @@ void actor_companion::launch(execution_unit*, bool, bool hide) {
 void actor_companion::on_exit() {
   enqueue_handler tmp;
   { // lifetime scope of guard
-    std::lock_guard<lock_type> guard(lock_);
+    std::unique_lock guard(lock_);
     on_enqueue_.swap(tmp);
   }
   if (on_exit_)

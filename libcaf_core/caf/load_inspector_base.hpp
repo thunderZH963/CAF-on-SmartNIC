@@ -29,8 +29,13 @@ public:
                                     type_name_or_anonymous<T>(), dptr()};
   }
 
-  constexpr auto virtual_object(string_view type_name) noexcept {
+  constexpr auto virtual_object(std::string_view type_name) noexcept {
     return super::object_t<Subtype>{invalid_type_id, type_name, dptr()};
+  }
+
+  template <class T>
+  bool begin_object_t() {
+    return dref().begin_object(type_id_v<T>, caf::type_name_v<T>);
   }
 
   template <class T>
@@ -77,7 +82,7 @@ public:
   template <class T, size_t... Is>
   bool tuple(T& xs, std::index_sequence<Is...>) {
     return dref().begin_tuple(sizeof...(Is))
-           && (detail::load(dref(), get<Is>(xs)) && ...) //
+           && (detail::load(dref(), std::get<Is>(xs)) && ...) //
            && dref().end_tuple();
   }
 
@@ -142,36 +147,6 @@ public:
         return false;
       }
     }
-  }
-
-  // -- deprecated API: remove with CAF 0.19 -----------------------------------
-
-  template <class T>
-  [[deprecated("auto-conversion to underlying type is unsafe, add inspect")]] //
-  std::enable_if_t<std::is_enum<T>::value, bool>
-  opaque_value(T& val) {
-    auto tmp = std::underlying_type_t<T>{0};
-    if (dref().value(tmp)) {
-      val = static_cast<T>(tmp);
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  template <class T>
-  [[deprecated("use apply instead")]] bool apply_object(T& x) {
-    return detail::save(dref(), x);
-  }
-
-  template <class... Ts>
-  [[deprecated("use apply instead")]] bool apply_objects(Ts&... xs) {
-    return (apply(xs) && ...);
-  }
-
-  template <class T>
-  [[deprecated("use apply instead")]] bool apply_value(T& x) {
-    return detail::save(dref(), x);
   }
 
 private:

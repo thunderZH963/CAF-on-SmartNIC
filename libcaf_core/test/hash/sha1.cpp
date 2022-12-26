@@ -6,7 +6,7 @@
 
 #include "caf/hash/sha1.hpp"
 
-#include "caf/test/dsl.hpp"
+#include "core-test.hpp"
 
 using namespace caf;
 
@@ -15,13 +15,13 @@ namespace {
 template <class... Ts>
 auto make_hash(Ts... xs) {
   static_assert(sizeof...(Ts) == 20);
-  return hash::sha1::result_type{{static_cast<byte>(xs)...}};
+  return hash::sha1::result_type{{static_cast<std::byte>(xs)...}};
 }
 
 } // namespace
 
 #define CHECK_HASH_EQ(str, bytes)                                              \
-  CAF_CHECK_EQUAL(hash::sha1::compute(string_view{str}), bytes);
+  CHECK_EQ(hash::sha1::compute(std::string_view{str}), bytes);
 
 CAF_TEST(strings are hashed by their content only) {
   CHECK_HASH_EQ("dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11",

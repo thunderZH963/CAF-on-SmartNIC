@@ -24,21 +24,16 @@ using namespace std::string_literals;
 
 namespace {
 
-static_assert(std::is_same<reacts_to<int, int>, result<void>(int, int)>::value);
-
-static_assert(std::is_same<replies_to<double>::with<double>,
-                           result<double>(double)>::value);
-
 // check invariants of type system
 using dummy1 = typed_actor<result<void>(int, int), result<double>(double)>;
 
-using dummy2 = dummy1::extend<reacts_to<ok_atom>>;
+using dummy2 = dummy1::extend<result<void>(ok_atom)>;
 
 static_assert(std::is_convertible<dummy2, dummy1>::value,
               "handle not assignable to narrower definition");
 
-using dummy3 = typed_actor<reacts_to<float, int>>;
-using dummy4 = typed_actor<replies_to<int>::with<double>>;
+using dummy3 = typed_actor<result<void>(float, int)>;
+using dummy4 = typed_actor<result<double>(int)>;
 using dummy5 = dummy4::extend_with<dummy3>;
 
 static_assert(std::is_convertible<dummy5, dummy3>::value,
@@ -51,7 +46,7 @@ static_assert(std::is_convertible<dummy5, dummy4>::value,
  *                        simple request/response test                        *
  ******************************************************************************/
 
-using server_type = typed_actor<replies_to<my_request>::with<bool>>;
+using server_type = typed_actor<result<bool>(my_request)>;
 
 server_type::behavior_type typed_server1() {
   return {
@@ -78,9 +73,9 @@ public:
 void client(event_based_actor* self, const actor& parent,
             const server_type& serv) {
   self->request(serv, infinite, my_request{0, 0}).then([=](bool val1) {
-    CAF_CHECK_EQUAL(val1, true);
+    CHECK_EQ(val1, true);
     self->request(serv, infinite, my_request{10, 20}).then([=](bool val2) {
-      CAF_CHECK_EQUAL(val2, false);
+      CHECK_EQ(val2, false);
       self->send(parent, ok_atom_v);
     });
   });
@@ -91,9 +86,8 @@ void client(event_based_actor* self, const actor& parent,
  ******************************************************************************/
 
 using event_testee_type
-  = typed_actor<replies_to<get_state_atom>::with<string>,
-                replies_to<string>::with<void>, replies_to<float>::with<void>,
-                replies_to<int>::with<int>>;
+  = typed_actor<result<string>(get_state_atom), result<void>(string),
+                result<void>(float), result<int>(int)>;
 
 class event_testee : public event_testee_type::base {
 public:
@@ -137,7 +131,7 @@ public:
  *                         simple 'forwarding' chain                          *
  ******************************************************************************/
 
-using string_actor = typed_actor<replies_to<string>::with<string>>;
+using string_actor = typed_actor<result<string>(string)>;
 
 string_actor::behavior_type string_reverter() {
   return {
@@ -160,8 +154,7 @@ string_actor::behavior_type string_delegator(string_actor::pointer self,
   };
 }
 
-using maybe_string_actor
-  = typed_actor<replies_to<string>::with<ok_atom, string>>;
+using maybe_string_actor = typed_actor<result<ok_atom, string>(string)>;
 
 maybe_string_actor::behavior_type maybe_string_reverter() {
   return {
@@ -206,7 +199,7 @@ behavior foo(event_based_actor* self) {
 
 int_actor::behavior_type int_fun2(int_actor::pointer self) {
   self->set_down_handler([=](down_msg& dm) {
-    CAF_CHECK_EQUAL(dm.reason, exit_reason::normal);
+    CHECK_EQ(dm.reason, exit_reason::normal);
     self->quit();
   });
   return {
@@ -229,7 +222,7 @@ behavior foo2(event_based_actor* self) {
 float_actor::behavior_type float_fun(float_actor::pointer self) {
   return {
     [=](float a) {
-      CAF_CHECK_EQUAL(a, 1.0f);
+      CHECK_EQ(a, 1.0f);
       self->quit(exit_reason::user_shutdown);
     },
   };
@@ -245,37 +238,37 @@ int_actor::behavior_type foo3(int_actor::pointer self) {
 
 struct fixture : test_coordinator_fixture<> {
   void test_typed_spawn(server_type ts) {
-    CAF_MESSAGE("the server returns false for inequal numbers");
+    MESSAGE("the server returns false for inequal numbers");
     inject((my_request), from(self).to(ts).with(my_request{1, 2}));
     expect((bool), from(ts).to(self).with(false));
-    CAF_MESSAGE("the server returns true for equal numbers");
+    MESSAGE("the server returns true for equal numbers");
     inject((my_request), from(self).to(ts).with(my_request{42, 42}));
     expect((bool), from(ts).to(self).with(true));
-    CAF_CHECK_EQUAL(sys.registry().running(), 2u);
+    CHECK_EQ(sys.registry().running(), 2u);
     auto c1 = self->spawn(client, self, ts);
     run();
     expect((ok_atom), from(c1).to(self).with(ok_atom_v));
-    CAF_CHECK_EQUAL(sys.registry().running(), 2u);
+    CHECK_EQ(sys.registry().running(), 2u);
   }
 };
 
 } // namespace
 
-CAF_TEST_FIXTURE_SCOPE(typed_spawn_tests, fixture)
+BEGIN_FIXTURE_SCOPE(fixture)
 
 /******************************************************************************
  *                             put it all together                            *
  ******************************************************************************/
 
 CAF_TEST(typed_spawns) {
-  CAF_MESSAGE("run test series with typed_server1");
+  MESSAGE("run test series with typed_server1");
   test_typed_spawn(sys.spawn(typed_server1));
   self->await_all_other_actors_done();
-  CAF_MESSAGE("finished test series with `typed_server1`");
-  CAF_MESSAGE("run test series with typed_server2");
+  MESSAGE("finished test series with `typed_server1`");
+  MESSAGE("run test series with typed_server2");
   test_typed_spawn(sys.spawn(typed_server2));
   self->await_all_other_actors_done();
-  CAF_MESSAGE("finished test series with `typed_server2`");
+  MESSAGE("finished test series with `typed_server2`");
   auto serv3 = self->spawn<typed_server3>("hi there", self);
   run();
   expect((string), from(serv3).to(self).with("hi there"s));
@@ -284,13 +277,13 @@ CAF_TEST(typed_spawns) {
 
 CAF_TEST(event_testee_series) {
   auto et = self->spawn<event_testee>();
-  CAF_MESSAGE("et->message_types() returns an interface description");
-  typed_actor<replies_to<get_state_atom>::with<string>> sub_et = et;
+  MESSAGE("et->message_types() returns an interface description");
+  typed_actor<result<string>(get_state_atom)> sub_et = et;
   std::set<string> iface{"(get_state_atom) -> (std::string)",
                          "(std::string) -> (void)", "(float) -> (void)",
                          "(int32_t) -> (int32_t)"};
-  CAF_CHECK_EQUAL(join(sub_et->message_types(), ","), join(iface, ","));
-  CAF_MESSAGE("the testee skips messages to drive its internal state machine");
+  CHECK_EQ(join(sub_et->message_types(), ","), join(iface, ","));
+  MESSAGE("the testee skips messages to drive its internal state machine");
   self->send(et, 1);
   self->send(et, 2);
   self->send(et, 3);
@@ -313,7 +306,7 @@ CAF_TEST(string_delegator_chain) {
   auto aut = self->spawn<monitored>(string_delegator,
                                     sys.spawn(string_reverter), true);
   std::set<string> iface{"(std::string) -> (std::string)"};
-  CAF_CHECK_EQUAL(aut->message_types(), iface);
+  CHECK_EQ(aut->message_types(), iface);
   inject((string), from(self).to(aut).with("Hello World!"s));
   run();
   expect((string), to(self).with("!dlroW olleH"s));
@@ -323,11 +316,11 @@ CAF_TEST(maybe_string_delegator_chain) {
   CAF_LOG_TRACE(CAF_ARG(self));
   auto aut = sys.spawn(maybe_string_delegator,
                        sys.spawn(maybe_string_reverter));
-  CAF_MESSAGE("send empty string, expect error");
+  MESSAGE("send empty string, expect error");
   inject((string), from(self).to(aut).with(""s));
   run();
   expect((error), to(self).with(sec::invalid_argument));
-  CAF_MESSAGE("send abcd string, expect dcba");
+  MESSAGE("send abcd string, expect dcba");
   inject((string), from(self).to(aut).with("abcd"s));
   run();
   expect((ok_atom, string), to(self).with(ok_atom_v, "dcba"s));
@@ -350,9 +343,9 @@ CAF_TEST(sending_typed_actors_and_down_msg) {
 }
 
 CAF_TEST(check_signature) {
-  using foo_type = typed_actor<replies_to<put_atom>::with<ok_atom>>;
+  using foo_type = typed_actor<result<ok_atom>(put_atom)>;
   using foo_result_type = result<ok_atom>;
-  using bar_type = typed_actor<reacts_to<ok_atom>>;
+  using bar_type = typed_actor<result<void>(ok_atom)>;
   auto foo_action = [](foo_type::pointer ptr) -> foo_type::behavior_type {
     return {
       [=](put_atom) -> foo_result_type {
@@ -400,6 +393,6 @@ SCENARIO("state classes may use typed pointers") {
   }
 }
 
-CAF_TEST_FIXTURE_SCOPE_END()
+END_FIXTURE_SCOPE()
 
 #endif // CAF_WINDOWS

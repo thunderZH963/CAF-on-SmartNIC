@@ -17,7 +17,6 @@
 #include "caf/message.hpp"
 #include "caf/span.hpp"
 #include "caf/type_id.hpp"
-#include "caf/variant.hpp"
 
 #include "inspector-tests.hpp"
 
@@ -28,7 +27,7 @@ namespace {
 struct testee : deserializer {
   std::string log;
 
-  bool load_field_failed(string_view, sec code) {
+  bool load_field_failed(std::string_view, sec code) {
     set_error(make_error(code));
     return false;
   }
@@ -50,7 +49,7 @@ struct testee : deserializer {
     return false;
   }
 
-  bool begin_object(type_id_t, string_view object_name) override {
+  bool begin_object(type_id_t, std::string_view object_name) override {
     new_line();
     indent += 2;
     log += "begin object ";
@@ -65,7 +64,7 @@ struct testee : deserializer {
     return true;
   }
 
-  bool begin_field(string_view name) override {
+  bool begin_field(std::string_view name) override {
     new_line();
     indent += 2;
     log += "begin field ";
@@ -73,7 +72,7 @@ struct testee : deserializer {
     return true;
   }
 
-  bool begin_field(string_view name, bool& is_present) override {
+  bool begin_field(std::string_view name, bool& is_present) override {
     new_line();
     indent += 2;
     log += "begin optional field ";
@@ -82,7 +81,7 @@ struct testee : deserializer {
     return true;
   }
 
-  bool begin_field(string_view name, span<const type_id_t>,
+  bool begin_field(std::string_view name, span<const type_id_t>,
                    size_t& type_index) override {
     new_line();
     indent += 2;
@@ -92,8 +91,8 @@ struct testee : deserializer {
     return true;
   }
 
-  bool begin_field(string_view name, bool& is_present, span<const type_id_t>,
-                   size_t&) override {
+  bool begin_field(std::string_view name, bool& is_present,
+                   span<const type_id_t>, size_t&) override {
     new_line();
     indent += 2;
     log += "begin optional variant field ";
@@ -187,10 +186,10 @@ struct testee : deserializer {
     return true;
   }
 
-  bool value(byte& x) override {
+  bool value(std::byte& x) override {
     new_line();
-    log += "byte value";
-    x = byte{};
+    log += "std::byte value";
+    x = std::byte{};
     return true;
   }
 
@@ -250,11 +249,11 @@ struct testee : deserializer {
     return primitive_value(x);
   }
 
-  bool value(span<byte> xs) override {
+  bool value(span<std::byte> xs) override {
     new_line();
-    log += "caf::span<caf::byte> value";
+    log += "caf::span<caf::std::byte> value";
     for (auto& x : xs)
-      x = byte{0};
+      x = std::byte{0};
     return true;
   }
 };
@@ -265,15 +264,15 @@ struct fixture {
 
 } // namespace
 
-CAF_TEST_FIXTURE_SCOPE(load_inspector_tests, fixture)
+BEGIN_FIXTURE_SCOPE(fixture)
 
 CAF_TEST(load inspectors can visit simple POD types) {
   point_3d p{1, 1, 1};
-  CAF_CHECK_EQUAL(inspect(f, p), true);
-  CAF_CHECK_EQUAL(p.x, 0);
-  CAF_CHECK_EQUAL(p.y, 0);
-  CAF_CHECK_EQUAL(p.z, 0);
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK_EQ(inspect(f, p), true);
+  CHECK_EQ(p.x, 0);
+  CHECK_EQ(p.y, 0);
+  CHECK_EQ(p.z, 0);
+  CHECK_EQ(f.log, R"_(
 begin object point_3d
   begin field x
     int32_t value
@@ -289,14 +288,14 @@ end object)_");
 
 CAF_TEST(load inspectors recurse into members) {
   line l{point_3d{1, 1, 1}, point_3d{1, 1, 1}};
-  CAF_CHECK_EQUAL(inspect(f, l), true);
-  CAF_CHECK_EQUAL(l.p1.x, 0);
-  CAF_CHECK_EQUAL(l.p1.y, 0);
-  CAF_CHECK_EQUAL(l.p1.z, 0);
-  CAF_CHECK_EQUAL(l.p2.x, 0);
-  CAF_CHECK_EQUAL(l.p2.y, 0);
-  CAF_CHECK_EQUAL(l.p2.z, 0);
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK_EQ(inspect(f, l), true);
+  CHECK_EQ(l.p1.x, 0);
+  CHECK_EQ(l.p1.y, 0);
+  CHECK_EQ(l.p1.z, 0);
+  CHECK_EQ(l.p2.x, 0);
+  CHECK_EQ(l.p2.y, 0);
+  CHECK_EQ(l.p2.z, 0);
+  CHECK_EQ(f.log, R"_(
 begin object line
   begin field p1
     begin object point_3d
@@ -328,9 +327,9 @@ end object)_");
 }
 
 CAF_TEST(load inspectors support optional) {
-  optional<int32_t> x;
-  CAF_CHECK_EQUAL(f.apply(x), true);
-  CAF_CHECK_EQUAL(f.log, R"_(
+  std::optional<int32_t> x;
+  CHECK_EQ(f.apply(x), true);
+  CHECK_EQ(f.log, R"_(
 begin object anonymous
   begin optional field value
   end field
@@ -339,10 +338,10 @@ end object)_");
 
 CAF_TEST(load inspectors support fields with fallbacks and invariants) {
   duration d{"minutes", 42};
-  CAF_CHECK_EQUAL(inspect(f, d), true);
-  CAF_CHECK_EQUAL(d.unit, "seconds");
-  CAF_CHECK_EQUAL(d.count, 0.0);
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK_EQ(inspect(f, d), true);
+  CHECK_EQ(d.unit, "seconds");
+  CHECK_EQ(d.count, 0.0);
+  CHECK_EQ(f.log, R"_(
 begin object duration
   begin optional field unit
   end field
@@ -354,10 +353,10 @@ end object)_");
 
 CAF_TEST(load inspectors support fields with optional values) {
   person p{"Bruce Almighty", std::string{"776-2323"}};
-  CAF_CHECK_EQUAL(inspect(f, p), true);
-  CAF_CHECK_EQUAL(p.name, "");
-  CAF_CHECK_EQUAL(p.phone, none);
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK_EQ(inspect(f, p), true);
+  CHECK_EQ(p.name, "");
+  CHECK_EQ(p.phone, std::nullopt);
+  CHECK_EQ(f.log, R"_(
 begin object person
   begin field name
     std::string value
@@ -371,10 +370,10 @@ CAF_TEST(load inspectors support fields with getters and setters) {
   foobar fb;
   fb.foo("hello");
   fb.bar("world");
-  CAF_CHECK_EQUAL(inspect(f, fb), true);
-  CAF_CHECK_EQUAL(fb.foo(), "");
-  CAF_CHECK_EQUAL(fb.bar(), "");
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK_EQ(inspect(f, fb), true);
+  CHECK_EQ(fb.foo(), "");
+  CHECK_EQ(fb.bar(), "");
+  CHECK_EQ(f.log, R"_(
 begin object foobar
   begin field foo
     std::string value
@@ -388,10 +387,10 @@ end object)_");
 CAF_TEST(load inspectors support variant fields) {
   dummy_message d;
   d.content = 42.0;
-  CAF_CHECK(inspect(f, d));
+  CHECK(inspect(f, d));
   // Our dummy inspector resets variants to their first type.
-  CAF_CHECK(holds_alternative<std::string>(d.content));
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK(holds_alternative<std::string>(d.content));
+  CHECK_EQ(f.log, R"_(
 begin object dummy_message
   begin variant field content
     std::string value
@@ -403,9 +402,9 @@ CAF_TEST(load inspectors support variant fields with fallbacks) {
   fallback_dummy_message d;
   using content_type = decltype(d.content);
   d.content = std::string{"hello world"};
-  CAF_CHECK(inspect(f, d));
-  CAF_CHECK_EQUAL(d.content, content_type{42.0});
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK(inspect(f, d));
+  CHECK_EQ(d.content, content_type{42.0});
+  CHECK_EQ(f.log, R"_(
 begin object fallback_dummy_message
   begin optional variant field content
   end field
@@ -414,8 +413,8 @@ end object)_");
 
 CAF_TEST(load inspectors support nasty data structures) {
   nasty x;
-  CAF_CHECK(inspect(f, x));
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK(inspect(f, x));
+  CHECK_EQ(f.log, R"_(
 begin object nasty
   begin field field_01
     int32_t value
@@ -510,8 +509,8 @@ end object)_");
 
 CAF_TEST(load inspectors support all basic STL types) {
   basics x;
-  CAF_CHECK(inspect(f, x));
-  CAF_CHECK_EQUAL(f.log, R"_(
+  CHECK(inspect(f, x));
+  CHECK_EQ(f.log, R"_(
 begin object basics
   begin field v1
     begin object anonymous
@@ -746,13 +745,11 @@ end object)_";
   }
 }
 
-#ifdef __cpp_lib_byte
-
 SCENARIO("load inspectors support std::byte") {
   GIVEN("a struct with std::byte") {
     struct byte_test {
       std::byte v1 = std::byte{0};
-      optional<std::byte> v2;
+      std::optional<std::byte> v2;
     };
     auto x = byte_test{};
     WHEN("inspecting the struct") {
@@ -762,7 +759,7 @@ SCENARIO("load inspectors support std::byte") {
         std::string baseline = R"_(
 begin object anonymous
   begin field v1
-    uint8_t value
+    std::byte value
   end field
   begin optional field v2
   end field
@@ -773,6 +770,4 @@ end object)_";
   }
 }
 
-#endif
-
-CAF_TEST_FIXTURE_SCOPE_END()
+END_FIXTURE_SCOPE()

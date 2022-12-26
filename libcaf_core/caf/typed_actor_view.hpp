@@ -118,16 +118,6 @@ public:
     return self_->mailbox();
   }
 
-  /// @copydoc scheduled_actor::stream_managers
-  auto& stream_managers() noexcept {
-    return self_->stream_managers();
-  }
-
-  /// @copydoc scheduled_actor::pending_stream_managers
-  auto& pending_stream_managers() noexcept {
-    return self_->pending_stream_managers();
-  }
-
   // -- event handlers ---------------------------------------------------------
 
   /// @copydoc scheduled_actor::set_default_handler
@@ -230,19 +220,12 @@ public:
     return self_->new_request_id(mp);
   }
 
-  void request_response_timeout(timespan d, message_id mid) {
+  disposable request_response_timeout(timespan d, message_id mid) {
     return self_->request_response_timeout(d, mid);
   }
 
   response_promise make_response_promise() {
     return self_->make_response_promise();
-  }
-
-  template <class... Ts,
-            class R = typename detail::make_response_promise_helper<
-              typename std::decay<Ts>::type...>::type>
-  R response(Ts&&... xs) {
-    return self_->response(std::forward<Ts>(xs)...);
   }
 
   template <class... Ts>

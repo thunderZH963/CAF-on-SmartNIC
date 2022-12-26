@@ -46,7 +46,7 @@ void stream::configure_read(receive_policy::config config) {
 
 void stream::write(const void* buf, size_t num_bytes) {
   CAF_LOG_TRACE(CAF_ARG(num_bytes));
-  auto first = reinterpret_cast<const byte*>(buf);
+  auto first = reinterpret_cast<const std::byte*>(buf);
   auto last = first + num_bytes;
   wr_offline_buf_.insert(wr_offline_buf_.end(), first, last);
 }
@@ -97,8 +97,6 @@ void stream::force_empty_write(const manager_ptr& mgr) {
 
 void stream::prepare_next_read() {
   collected_ = 0;
-  // This cast does nothing, but prevents a weird compiler error on GCC <= 4.9.
-  // TODO: remove cast when dropping support for GCC 4.9.
   switch (static_cast<receive_policy_flag>(state_.rd_flag)) {
     case receive_policy_flag::exactly:
       if (rd_buf_.size() != max_)

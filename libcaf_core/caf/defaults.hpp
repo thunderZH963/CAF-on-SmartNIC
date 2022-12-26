@@ -8,15 +8,31 @@
 #include <cstddef>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
-#include <mutex>
 
 #include "caf/detail/build_config.hpp"
 #include "caf/detail/log_level.hpp"
-#include "caf/string_view.hpp"
 #include "caf/timestamp.hpp"
 
 // -- hard-coded default values for various CAF options ------------------------
+
+namespace caf::defaults {
+
+/// Stores the name of a parameter along with the fallback value.
+template <class T>
+struct parameter {
+  std::string_view name;
+  T fallback;
+};
+
+/// @relates parameter
+template <class T>
+constexpr parameter<T> make_parameter(std::string_view name, T fallback) {
+  return {name, fallback};
+}
+
+} // namespace caf::defaults
 
 namespace caf::defaults::stream {
 
@@ -30,11 +46,7 @@ constexpr auto max_batch_delay = timespan{1'000'000};
 /// The `token-based` controller associates each stream element with one token.
 /// Input buffer and batch sizes are then statically defined in terms of tokens.
 /// This strategy makes no dynamic adjustment or sampling.
-constexpr auto credit_policy = string_view{"size-based"};
-
-[[deprecated("this parameter no longer has any effect")]] //
-constexpr auto credit_round_interval
-  = max_batch_delay;
+constexpr auto credit_policy = std::string_view{"size-based"};
 
 } // namespace caf::defaults::stream
 
@@ -76,10 +88,9 @@ constexpr auto buffer_size = int32_t{4096}; // // 32 KB for elements of size 8.
 
 namespace caf::defaults::scheduler {
 
-constexpr auto policy = string_view{"stealing"};
-constexpr auto profiling_output_file = string_view{""};
-// constexpr auto max_throughput = std::numeric_limits<size_t>::max();
-constexpr auto max_throughput = 1;
+constexpr auto policy = std::string_view{"stealing"};
+constexpr auto profiling_output_file = std::string_view{""};
+constexpr auto max_throughput = 1
 constexpr auto profiling_resolution = timespan(100'000'000);
 
 } // namespace caf::defaults::scheduler
@@ -98,80 +109,44 @@ constexpr auto relaxed_sleep_duration = timespan{10'000'000};
 
 namespace caf::defaults::logger::file {
 
-constexpr auto format = string_view{"%r %c %p %a %t %C %M %F:%L %m%n"};
-constexpr auto path = string_view{"actor_log_[PID]_[TIMESTAMP]_[NODE].log"};
+constexpr auto format = std::string_view{"%r %c %p %a %t %C %M %F:%L %m%n"};
+constexpr auto path
+  = std::string_view{"actor_log_[PID]_[TIMESTAMP]_[NODE].log"};
 
 } // namespace caf::defaults::logger::file
 
 namespace caf::defaults::logger::console {
 
 constexpr auto colored = true;
-constexpr auto format = string_view{"[%c:%p] %d %m"};
+constexpr auto format = std::string_view{"[%c:%p] %d %m"};
 
 } // namespace caf::defaults::logger::console
 
 namespace caf::defaults::middleman {
 
-constexpr auto app_identifier = string_view{"generic-caf-app"};
-constexpr auto network_backend = string_view{"default"};
-constexpr auto max_consecutive_reads = size_t{50};
-constexpr auto heartbeat_interval = timespan{10'000'000'000};
-constexpr auto connection_timeout = timespan{600'000'000'000};
+constexpr auto app_identifier = std::string_view{"generic-caf-app"};
 constexpr auto cached_udp_buffers = size_t{10};
+constexpr auto connection_timeout = timespan{1800'000'000'000};
+constexpr auto heartbeat_interval = timespan{10'000'000'000};
+constexpr auto max_consecutive_reads = size_t{50};
 constexpr auto max_pending_msgs = size_t{10};
+constexpr auto network_backend = std::string_view{"default"};
 
 } // namespace caf::defaults::middleman
 
-namespace caf::defaults::default_handler {
-class CAF_CORE_EXPORT buf_handler {
-private:
-  // buf_handler();
-  // ~buf_handler();
-  buf_handler& operator=(const buf_handler &);
-  std::chrono::steady_clock::time_point input_time[2] = {std::chrono::steady_clock::now(), std::chrono::steady_clock::now()};
-  std::chrono::steady_clock::time_point output_time[2] = {std::chrono::steady_clock::now(), std::chrono::steady_clock::now()};
-  size_t input_payload{1};
-  size_t output_payload{1};
-  mutable std::mutex input_mtx_;
-  mutable std::mutex output_mtx_;
+namespace caf::defaults::flow {
 
-public:
-  public:
-	static buf_handler& getInstance() {
-		static buf_handler instance;
-		return instance;
-  }
+constexpr auto min_demand = size_t{8};
+constexpr auto batch_size = size_t{32};
+constexpr auto buffer_size = size_t{128};
 
-  double get_input_speed() {
-    input_mtx_.lock();
-    auto interval = (double) (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - input_time[0]).count())/1000000000.0;
-    // printf("got input speed: %lf\n", input_payload / interval);
-    input_mtx_.unlock();
-    return input_payload / interval;
-  }
+} // namespace caf::defaults::flow
 
-  double get_output_speed() {
-    output_mtx_.lock();
-    auto interval = (double) (std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - output_time[0]).count())/1000000000.0;
-    // printf("got output speed: %lf\n", output_payload / interval);
-    output_mtx_.unlock();
-    return output_payload / interval;
-  }
+namespace caf::defaults::net {
 
-  void set_new_input(std::chrono::steady_clock::time_point t, size_t payload) {
-    input_mtx_.lock();
-    input_time[0] = input_time[1];
-    input_time[1] = t;
-    input_payload = payload;
-    input_mtx_.unlock();
-  }
+/// Configures how many concurrent connections an acceptor allows. When reaching
+/// this limit, the connector stops accepting additional connections until a
+/// previous connection has been closed.
+constexpr auto max_connections = make_parameter("max-connections", size_t{64});
 
-  void set_new_output(std::chrono::steady_clock::time_point t, size_t payload) {
-    output_mtx_.lock();
-    output_time[0] = output_time[1];
-    output_time[1] = t;
-    output_payload = payload;
-    output_mtx_.unlock();
-  }
-}; 
-}
+} // namespace caf::defaults::net

@@ -120,7 +120,7 @@ struct fixture : test_coordinator_fixture<> {
 
 } // namespace
 
-CAF_TEST_FIXTURE_SCOPE(group_tunnel_tests, fixture)
+BEGIN_FIXTURE_SCOPE(fixture)
 
 SCENARIO("tunnels automatically subscribe to their origin on first subscribe") {
   GIVEN("a group with two subscribers and a tunnel") {
@@ -164,8 +164,7 @@ SCENARIO("tunnels dispatch published messages") {
     }
     WHEN("an actors sends to the tunnel") {
       self->send(proxy, put_atom_v, 42);
-      THEN("the message travels to the origin")
-      AND("tunnel subscribers get the forwarded message eventually") {
+      THEN("the message travels to the origin and eventually to subscribers") {
         expect((sys_atom, forward_atom, message), from(self).to(worker));
         expect((forward_atom, message), from(self).to(intermediary));
         expect((put_atom, int), from(self).to(t1).with(_, 42));
@@ -263,4 +262,4 @@ SCENARIO("tunnels cache messages until connected") {
   }
 }
 
-CAF_TEST_FIXTURE_SCOPE_END()
+END_FIXTURE_SCOPE()

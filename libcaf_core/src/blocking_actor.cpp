@@ -50,7 +50,7 @@ blocking_actor::~blocking_actor() {
   // avoid weak-vtables warning
 }
 
-void blocking_actor::enqueue(mailbox_element_ptr ptr, execution_unit*) {
+bool blocking_actor::enqueue(mailbox_element_ptr ptr, execution_unit*) {
   CAF_ASSERT(ptr != nullptr);
   CAF_ASSERT(getf(is_blocking_flag));
   CAF_LOG_TRACE(CAF_ARG(*ptr));
@@ -72,8 +72,10 @@ void blocking_actor::enqueue(mailbox_element_ptr ptr, execution_unit*) {
       detail::sync_request_bouncer srb{exit_reason()};
       srb(src, mid);
     }
+    return false;
   } else {
     CAF_LOG_ACCEPT_EVENT(false);
+    return true;
   }
 }
 
@@ -350,12 +352,6 @@ void blocking_actor::varargs_tup_receive(receive_cond& rcc, message_id mid,
     auto fun = make_blocking_behavior(&bhvr, std::move(tmp));
     receive_impl(rcc, mid, fun);
   }
-}
-
-sec blocking_actor::build_pipeline(stream_slot, stream_slot,
-                                   stream_manager_ptr) {
-  CAF_LOG_ERROR("blocking_actor::build_pipeline called");
-  return sec::bad_function_call;
 }
 
 size_t blocking_actor::attach_functor(const actor& x) {

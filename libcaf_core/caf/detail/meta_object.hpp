@@ -6,11 +6,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "caf/detail/core_export.hpp"
 #include "caf/fwd.hpp"
 #include "caf/span.hpp"
-#include "caf/string_view.hpp"
 
 namespace caf::detail {
 
@@ -18,7 +18,7 @@ namespace caf::detail {
 /// pointers.
 struct meta_object {
   /// Stores a human-readable representation of the type's name.
-  string_view type_name;
+  std::string_view type_name;
 
   /// Stores how many Bytes objects of this type require, including padding for
   /// aligning to `max_align_t`.
@@ -61,7 +61,7 @@ using global_meta_objects_guard_type = intrusive_ptr<ref_counted>;
 CAF_CORE_EXPORT global_meta_objects_guard_type global_meta_objects_guard();
 
 /// Returns the global storage for all meta objects. The ::type_id of an object
-/// is the index for accessing the corresonding meta object.
+/// is the index for accessing the corresponding meta object.
 CAF_CORE_EXPORT span<const meta_object> global_meta_objects();
 
 /// Returns the global meta object for given type ID.

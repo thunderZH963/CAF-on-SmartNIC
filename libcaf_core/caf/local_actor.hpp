@@ -110,7 +110,7 @@ public:
 
   /// Requests a new timeout for `mid`.
   /// @pre `mid.is_request()`
-  void request_response_timeout(timespan d, message_id mid);
+  disposable request_response_timeout(timespan d, message_id mid);
 
   // -- spawn functions --------------------------------------------------------
 
@@ -357,17 +357,6 @@ public:
     return make_response_promise<response_promise>();
   }
 
-  template <class... Ts>
-  [[deprecated("simply return the result from the message handler")]] //
-  detail::response_promise_t<std::decay_t<Ts>...>
-  response(Ts&&... xs) {
-    if (current_element_) {
-      response_promise::respond_to(this, current_element_,
-                                   make_message(std::forward<Ts>(xs)...));
-    }
-    return {};
-  }
-
   const char* name() const override;
 
   /// Serializes the state of this actor to `sink`. This function is
@@ -430,7 +419,10 @@ public:
 
   bool cleanup(error&& fail_state, execution_unit* host) override;
 
-  message_id new_request_id(message_priority mp);
+  message_id new_request_id(message_priority mp) noexcept;
+
+  /// Returns a 64-bit ID that is unique on this actor.
+  uint64_t new_u64_id() noexcept;
 
   template <class T>
   void respond(T& x) {

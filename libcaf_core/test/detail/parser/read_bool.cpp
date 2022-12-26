@@ -6,13 +6,13 @@
 
 #include "caf/detail/parser/read_bool.hpp"
 
-#include "caf/test/unit_test.hpp"
+#include "core-test.hpp"
 
 #include <string>
+#include <string_view>
+#include <variant>
 
 #include "caf/parser_state.hpp"
-#include "caf/string_view.hpp"
-#include "caf/variant.hpp"
 
 using namespace caf;
 
@@ -25,10 +25,10 @@ struct bool_parser_consumer {
   }
 };
 
-using res_t = variant<pec, bool>;
+using res_t = std::variant<pec, bool>;
 
 struct bool_parser {
-  res_t operator()(string_view str) {
+  res_t operator()(std::string_view str) {
     bool_parser_consumer f;
     string_parser_state res{str.begin(), str.end()};
     detail::parser::read_bool(res, f);
@@ -45,26 +45,26 @@ struct fixture {
 
 } // namespace
 
-CAF_TEST_FIXTURE_SCOPE(read_bool_tests, fixture)
+BEGIN_FIXTURE_SCOPE(fixture)
 
 CAF_TEST(valid booleans) {
-  CAF_CHECK_EQUAL(p("true"), res_t{true});
-  CAF_CHECK_EQUAL(p("false"), res_t{false});
+  CHECK_EQ(p("true"), res_t{true});
+  CHECK_EQ(p("false"), res_t{false});
 }
 
 CAF_TEST(invalid booleans) {
-  CAF_CHECK_EQUAL(p(""), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p("t"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p("tr"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p("tru"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p(" true"), res_t{pec::unexpected_character});
-  CAF_CHECK_EQUAL(p("f"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p("fa"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p("fal"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p("fals"), res_t{pec::unexpected_eof});
-  CAF_CHECK_EQUAL(p(" false"), res_t{pec::unexpected_character});
-  CAF_CHECK_EQUAL(p("tr\nue"), res_t{pec::unexpected_newline});
-  CAF_CHECK_EQUAL(p("trues"), res_t{pec::trailing_character});
+  CHECK_EQ(p(""), res_t{pec::unexpected_eof});
+  CHECK_EQ(p("t"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p("tr"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p("tru"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p(" true"), res_t{pec::unexpected_character});
+  CHECK_EQ(p("f"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p("fa"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p("fal"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p("fals"), res_t{pec::unexpected_eof});
+  CHECK_EQ(p(" false"), res_t{pec::unexpected_character});
+  CHECK_EQ(p("tr\nue"), res_t{pec::unexpected_newline});
+  CHECK_EQ(p("trues"), res_t{pec::trailing_character});
 }
 
-CAF_TEST_FIXTURE_SCOPE_END()
+END_FIXTURE_SCOPE()

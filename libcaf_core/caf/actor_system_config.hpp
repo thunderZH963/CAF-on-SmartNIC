@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
@@ -19,13 +20,11 @@
 #include "caf/config_option_set.hpp"
 #include "caf/config_value.hpp"
 #include "caf/detail/core_export.hpp"
-#include "caf/detail/safe_equal.hpp"
 #include "caf/detail/type_traits.hpp"
 #include "caf/dictionary.hpp"
 #include "caf/fwd.hpp"
 #include "caf/is_typed_actor.hpp"
 #include "caf/settings.hpp"
-#include "caf/stream.hpp"
 #include "caf/thread_hook.hpp"
 
 namespace caf {
@@ -84,7 +83,7 @@ public:
 
   /// Sets a config by using its name `config_name` to `config_value`.
   template <class T>
-  actor_system_config& set(string_view name, T&& value) {
+  actor_system_config& set(std::string_view name, T&& value) {
     return set_impl(name, config_value{std::forward<T>(value)});
   }
 
@@ -99,9 +98,6 @@ public:
   /// provides a config file path on the command line.
   error parse(string_list args);
 
-  [[deprecated("set the config_file_path member instead")]] error
-  parse(string_list args, const char* config_file_cstr);
-
   /// Parses the CLI options `{argc, argv}` and `config` as configuration file.
   error parse(int argc, char** argv, std::istream& config);
 
@@ -110,9 +106,6 @@ public:
   /// provides a config file path on the command line.
   error parse(int argc, char** argv);
 
-  [[deprecated("set the config_file_path member instead")]] error
-  parse(int argc, char** argv, const char* config_file_cstr);
-
   /// Allows other nodes to spawn actors created by `fun`
   /// dynamically by using `name` as identifier.
   /// @experimental
@@ -120,24 +113,22 @@ public:
 
   /// Allows other nodes to spawn actors of type `T`
   /// dynamically by using `name` as identifier.
-  /// The behavior of `spawn` can be modified by setting `Os`, e.g.,
-  /// to opt-out of the cooperative scheduling.
   /// @experimental
-  template <class T, spawn_options Os = no_spawn_options, class... Ts>
+  template <class T, class... Ts>
   actor_system_config& add_actor_type(std::string name) {
     using handle = typename infer_handle_from_class<T>::type;
     static_assert(detail::is_complete<type_id<handle>>);
-    return add_actor_factory(std::move(name), make_actor_factory<T, Os, Ts...>());
+    return add_actor_factory(std::move(name), make_actor_factory<T, Ts...>());
   }
 
   /// Allows other nodes to spawn actors implemented by function `f`
   /// dynamically by using `name` as identifier.
   /// @experimental
-  template <class F, spawn_options Os = no_spawn_options>
+  template <class F>
   actor_system_config& add_actor_type(std::string name, F f) {
     using handle = typename infer_handle_from_fun<F>::type;
     static_assert(detail::is_complete<type_id<handle>>);
-    return add_actor_factory(std::move(name), make_actor_factory<F, Os>(std::move(f)));
+    return add_actor_factory(std::move(name), make_actor_factory(std::move(f)));
   }
 
   /// Loads module `T` with optional template parameters `Ts...`.
@@ -204,14 +195,6 @@ public:
   /// Credentials for connecting to the bootstrap node.
   std::string bootstrap_node;
 
-  // -- stream parameters ------------------------------------------------------
-
-  /// @private
-  timespan stream_max_batch_delay;
-
-  /// @private
-  timespan stream_credit_round_interval;
-
   // -- OpenSSL parameters -----------------------------------------------------
 
   std::string openssl_certificate;
@@ -254,11 +237,6 @@ public:
 
   int (*slave_mode_fun)(actor_system&, const actor_system_config&);
 
-  // -- default error rendering functions --------------------------------------
-
-  [[deprecated("please use to_string() on the error")]] static std::string
-  render(const error& err);
-
   // -- config file parsing ----------------------------------------------------
 
   /// Tries to open `filename` and parses its content as CAF config file.
@@ -273,8 +251,8 @@ public:
   /// @param opts User-defined config options for type checking.
   /// @returns A ::settings dictionary with the parsed content of `filename` on
   ///          success, an ::error otherwise.
-  static expected<settings>
-  parse_config_file(const char* filename, const config_option_set& opts);
+  static expected<settings> parse_config_file(const char* filename,
+                                              const config_option_set& opts);
 
   /// Tries to open `filename`, parses its content as CAF config file and
   /// stores all entries in `result` (overrides conflicting entries). Also
@@ -285,9 +263,9 @@ public:
   ///               partial results if this function returns an error.
   /// @returns A default-constructed ::error on success, the error code of the
   ///          parser otherwise.
-  static error
-  parse_config_file(const char* filename, const config_option_set& opts,
-                    settings& result);
+  static error parse_config_file(const char* filename,
+                                 const config_option_set& opts,
+                                 settings& result);
 
   /// Parses the content of `source` using CAF's config format.
   /// @param source Character sequence in CAF's config format.
@@ -301,8 +279,8 @@ public:
   /// @param opts User-defined config options for type checking.
   /// @returns A ::settings dictionary with the parsed content of `source` on
   ///          success, an ::error otherwise.
-  static expected<settings>
-  parse_config(std::istream& source, const config_option_set& opts);
+  static expected<settings> parse_config(std::istream& source,
+                                         const config_option_set& opts);
 
   /// Parses the content of `source` using CAF's config format and stores all
   /// entries in `result` (overrides conflicting entries). Also type-checks
@@ -330,7 +308,7 @@ private:
   mutable std::vector<char*> c_args_remainder_;
   std::vector<char> c_args_remainder_buf_;
 
-  actor_system_config& set_impl(string_view name, config_value value);
+  actor_system_config& set_impl(std::string_view name, config_value value);
 
   std::pair<error, std::string> extract_config_file_path(string_list& args);
 };
@@ -341,28 +319,28 @@ CAF_CORE_EXPORT const settings& content(const actor_system_config& cfg);
 /// Returns whether `xs` associates a value of type `T` to `name`.
 /// @relates actor_system_config
 template <class T>
-bool holds_alternative(const actor_system_config& cfg, string_view name) {
+bool holds_alternative(const actor_system_config& cfg, std::string_view name) {
   return holds_alternative<T>(content(cfg), name);
 }
 
 /// Tries to retrieve the value associated to `name` from `cfg`.
 /// @relates actor_system_config
 template <class T>
-auto get_if(const actor_system_config* cfg, string_view name) {
+auto get_if(const actor_system_config* cfg, std::string_view name) {
   return get_if<T>(&content(*cfg), name);
 }
 
 /// Retrieves the value associated to `name` from `cfg`.
 /// @relates actor_system_config
 template <class T>
-T get(const actor_system_config& cfg, string_view name) {
+T get(const actor_system_config& cfg, std::string_view name) {
   return get<T>(content(cfg), name);
 }
 
 /// Retrieves the value associated to `name` from `cfg` or returns `fallback`.
 /// @relates actor_system_config
 template <class To = get_or_auto_deduce, class Fallback>
-auto get_or(const actor_system_config& cfg, string_view name,
+auto get_or(const actor_system_config& cfg, std::string_view name,
             Fallback&& fallback) {
   return get_or<To>(content(cfg), name, std::forward<Fallback>(fallback));
 }
@@ -371,7 +349,7 @@ auto get_or(const actor_system_config& cfg, string_view name,
 /// of type `T`.
 /// @relates actor_system_config
 template <class T>
-expected<T> get_as(const actor_system_config& cfg, string_view name) {
+expected<T> get_as(const actor_system_config& cfg, std::string_view name) {
   return get_as<T>(content(cfg), name);
 }
 

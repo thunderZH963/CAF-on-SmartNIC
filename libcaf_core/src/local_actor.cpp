@@ -14,6 +14,7 @@
 #include "caf/binary_serializer.hpp"
 #include "caf/default_attachable.hpp"
 #include "caf/detail/glob_match.hpp"
+#include "caf/disposable.hpp"
 #include "caf/exit_reason.hpp"
 #include "caf/logger.hpp"
 #include "caf/resumable.hpp"
@@ -42,7 +43,7 @@ local_actor::metrics_t make_instance_metrics(local_actor* self) {
     };
   self->setf(abstract_actor::collects_metrics_flag);
   const auto& families = sys.actor_metric_families();
-  string_view sv{name, strlen(name)};
+  std::string_view sv{name, strlen(name)};
   return {
     families.processing_time->get_or_add({{"name", sv}}),
     families.mailbox_time->get_or_add({{"name", sv}}),
@@ -84,13 +85,16 @@ auto local_actor::now() const noexcept -> clock_type::time_point {
   return clock().now();
 }
 
-void local_actor::request_response_timeout(timespan timeout, message_id mid) {
+disposable local_actor::request_response_timeout(timespan timeout,
+                                                 message_id mid) {
   CAF_LOG_TRACE(CAF_ARG(timeout) << CAF_ARG(mid));
   if (timeout == infinite)
-    return;
-  auto t = clock().now();
-  t += timeout;
-  clock().set_request_timeout(t, this, mid.response_id());
+    return {};
+  auto t = clock().now() + timeout;
+  return clock().schedule_message(
+    t, strong_actor_ptr{ctrl()},
+    make_mailbox_element(nullptr, mid.response_id(), {},
+                         make_error(sec::request_timeout)));
 }
 
 void local_actor::monitor(abstract_actor* ptr, message_priority priority) {
@@ -125,9 +129,14 @@ void local_actor::on_exit() {
   // nop
 }
 
-message_id local_actor::new_request_id(message_priority mp) {
+message_id local_actor::new_request_id(message_priority mp) noexcept {
   auto result = ++last_request_id_;
   return mp == message_priority::normal ? result : result.with_high_priority();
+}
+
+uint64_t local_actor::new_u64_id() noexcept {
+  auto result = ++last_request_id_;
+  return result.integer_value();
 }
 
 void local_actor::send_exit(const actor_addr& whom, error reason) {
@@ -163,7 +172,6 @@ bool local_actor::cleanup(error&& fail_state, execution_unit* host) {
   unregister_from_system();
   CAF_LOG_TERMINATE_EVENT(this, fail_state);
   monitorable_actor::cleanup(std::move(fail_state), host);
-  clock().cancel_timeouts(this);
   return true;
 }
 

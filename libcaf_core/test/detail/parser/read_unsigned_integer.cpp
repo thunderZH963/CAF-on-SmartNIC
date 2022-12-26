@@ -6,11 +6,11 @@
 
 #include "caf/detail/parser/read_unsigned_integer.hpp"
 
-#include "caf/test/dsl.hpp"
+#include "core-test.hpp"
+
+#include <string_view>
 
 #include "caf/parser_state.hpp"
-#include "caf/string_view.hpp"
-#include "caf/variant.hpp"
 
 using namespace caf;
 
@@ -28,17 +28,17 @@ struct unsigned_integer_consumer {
 };
 
 template <class T>
-optional<T> read(string_view str) {
+std::optional<T> read(std::string_view str) {
   unsigned_integer_consumer<T> consumer;
   string_parser_state ps{str.begin(), str.end()};
   detail::parser::read_unsigned_integer(ps, consumer);
   if (ps.code != pec::success)
-    return none;
+    return std::nullopt;
   return consumer.x;
 }
 
 template <class T>
-bool overflow(string_view str) {
+bool overflow(std::string_view str) {
   unsigned_integer_consumer<T> consumer;
   string_parser_state ps{str.begin(), str.end()};
   detail::parser::read_unsigned_integer(ps, consumer);
@@ -52,17 +52,16 @@ T max_val() {
 
 } // namespace
 
-#define ZERO_VALUE(type, literal)                                              \
-  CAF_CHECK_EQUAL(read<type>(#literal), type(0));
+#define ZERO_VALUE(type, literal) CHECK_EQ(read<type>(#literal), type(0));
 
 #define MAX_VALUE(type, literal)                                               \
-  CAF_CHECK_EQUAL(read<type>(#literal), max_val<type>());
+  CHECK_EQ(read<type>(#literal), max_val<type>());
 
 #ifdef OVERFLOW
 #  undef OVERFLOW
 #endif // OVERFLOW
 
-#define OVERFLOW(type, literal) CAF_CHECK(overflow<type>(#literal));
+#define OVERFLOW(type, literal) CHECK(overflow<type>(#literal));
 
 CAF_TEST(read zeros) {
   ZERO_VALUE(uint8_t, 0);

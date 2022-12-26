@@ -12,35 +12,36 @@
 
 #include "caf/event_based_actor.hpp"
 #include "caf/policy/select_all.hpp"
+#include "caf/result.hpp"
 
 using namespace caf;
 
 namespace {
 
-using discarding_server_type = typed_actor<replies_to<int, int>::with<void>>;
+using discarding_server_type = typed_actor<result<void>(int, int)>;
 
-using adding_server_type = typed_actor<replies_to<int, int>::with<int>>;
+using adding_server_type = typed_actor<result<int>(int, int)>;
 
-using result_type = variant<none_t, unit_t, int>;
+using result_type = std::variant<none_t, unit_t, int>;
 
 struct fixture : test_coordinator_fixture<> {
-  fixture() {
-    result = std::make_shared<result_type>(none);
-    discarding_server = make_server([](int, int) {});
-    adding_server = make_server([](int x, int y) { return x + y; });
-    run();
-  }
-
   template <class F>
-  auto make_server(F f)
-    -> typed_actor<replies_to<int, int>::with<decltype(f(1, 2))>> {
-    using impl = typed_actor<replies_to<int, int>::with<decltype(f(1, 2))>>;
+  auto make_server(F f) {
+    using res_t = caf::result<decltype(f(1, 2))>;
+    using impl = typed_actor<res_t(int, int)>;
     auto init = [f]() -> typename impl::behavior_type {
       return {
         [f](int x, int y) { return f(x, y); },
       };
     };
     return sys.spawn(init);
+  }
+
+  fixture() {
+    result = std::make_shared<result_type>(none);
+    discarding_server = make_server([](int, int) {});
+    adding_server = make_server([](int x, int y) { return x + y; });
+    run();
   }
 
   template <class T>
@@ -65,10 +66,10 @@ struct fixture : test_coordinator_fixture<> {
 #define SUBTEST(message)                                                       \
   *result = none;                                                              \
   run();                                                                       \
-  CAF_MESSAGE("subtest: " message);                                            \
+  MESSAGE("subtest: " message);                                                \
   for (int subtest_dummy = 0; subtest_dummy < 1; ++subtest_dummy)
 
-CAF_TEST_FIXTURE_SCOPE(requester_tests, fixture)
+BEGIN_FIXTURE_SCOPE(fixture)
 
 CAF_TEST(requests without result) {
   auto server = discarding_server;
@@ -79,7 +80,7 @@ CAF_TEST(requests without result) {
     run_once();
     expect((int, int), from(client).to(server).with(1, 2));
     expect((void), from(server).to(client));
-    CAF_CHECK_EQUAL(*result, result_type{unit});
+    CHECK_EQ(*result, result_type{unit});
   }
   SUBTEST("request.await") {
     auto client = sys.spawn([=](event_based_actor* self) {
@@ -88,13 +89,13 @@ CAF_TEST(requests without result) {
     run_once();
     expect((int, int), from(client).to(server).with(1, 2));
     expect((void), from(server).to(client));
-    CAF_CHECK_EQUAL(*result, result_type{unit});
+    CHECK_EQ(*result, result_type{unit});
   }
   SUBTEST("request.receive") {
     auto res_hdl = self->request(server, infinite, 1, 2);
     run();
     res_hdl.receive([&] { *result = unit; }, ERROR_HANDLER);
-    CAF_CHECK_EQUAL(*result, result_type{unit});
+    CHECK_EQ(*result, result_type{unit});
   }
 }
 
@@ -107,7 +108,7 @@ CAF_TEST(requests with integer result) {
     run_once();
     expect((int, int), from(client).to(server).with(1, 2));
     expect((int), from(server).to(client).with(3));
-    CAF_CHECK_EQUAL(*result, result_type{3});
+    CHECK_EQ(*result, result_type{3});
   }
   SUBTEST("request.await") {
     auto client = sys.spawn([=](event_based_actor* self) {
@@ -116,13 +117,13 @@ CAF_TEST(requests with integer result) {
     run_once();
     expect((int, int), from(client).to(server).with(1, 2));
     expect((int), from(server).to(client).with(3));
-    CAF_CHECK_EQUAL(*result, result_type{3});
+    CHECK_EQ(*result, result_type{3});
   }
   SUBTEST("request.receive") {
     auto res_hdl = self->request(server, infinite, 1, 2);
     run();
     res_hdl.receive([&](int x) { *result = x; }, ERROR_HANDLER);
-    CAF_CHECK_EQUAL(*result, result_type{3});
+    CHECK_EQ(*result, result_type{3});
   }
 }
 
@@ -136,7 +137,7 @@ CAF_TEST(delegated request with integer result) {
   expect((int, int), from(client).to(server).with(1, 2));
   expect((int, int), from(client).to(worker).with(1, 2));
   expect((int), from(worker).to(client).with(3));
-  CAF_CHECK_EQUAL(*result, result_type{3});
+  CHECK_EQ(*result, result_type{3});
 }
 
 CAF_TEST(requesters support fan_out_request) {
@@ -152,7 +153,7 @@ CAF_TEST(requesters support fan_out_request) {
     self->fan_out_request<select_all>(workers, infinite, 1, 2)
       .then([=](std::vector<int> results) {
         for (auto result : results)
-          CAF_CHECK_EQUAL(result, 3);
+          CHECK_EQ(result, 3);
         *sum = std::accumulate(results.begin(), results.end(), 0);
       });
   });
@@ -163,7 +164,7 @@ CAF_TEST(requesters support fan_out_request) {
   expect((int), from(workers[1]).to(client).with(3));
   expect((int, int), from(client).to(workers[2]).with(1, 2));
   expect((int), from(workers[2]).to(client).with(3));
-  CAF_CHECK_EQUAL(*sum, 9);
+  CHECK_EQ(*sum, 9);
 }
 
 #ifdef CAF_ENABLE_EXCEPTIONS
@@ -220,4 +221,117 @@ SCENARIO("request.await enforces a processing order") {
   }
 }
 
-CAF_TEST_FIXTURE_SCOPE_END()
+// The GH-1299 worker processes int32 and string messages but alternates between
+// processing either type.
+
+using log_ptr = std::shared_ptr<std::string>;
+
+behavior gh1299_worker_bhvr1(caf::event_based_actor* self, log_ptr log);
+
+behavior gh1299_worker_bhvr2(caf::event_based_actor* self, log_ptr log);
+
+behavior gh1299_worker(caf::event_based_actor* self, log_ptr log) {
+  self->set_default_handler(skip);
+  return gh1299_worker_bhvr1(self, log);
+}
+
+behavior gh1299_worker_bhvr1(caf::event_based_actor* self, log_ptr log) {
+  return {
+    [self, log](int32_t x) {
+      *log += "int: ";
+      *log += std::to_string(x);
+      *log += '\n';
+      self->become(gh1299_worker_bhvr2(self, log));
+    },
+  };
+}
+
+behavior gh1299_worker_bhvr2(caf::event_based_actor* self, log_ptr log) {
+  return {
+    [self, log](const std::string& x) {
+      *log += "string: ";
+      *log += x;
+      *log += '\n';
+      self->become(gh1299_worker_bhvr1(self, log));
+    },
+  };
+}
+
+TEST_CASE("GH-1299 regression non-blocking") {
+  SUBTEST("HIGH (skip) -> NORMAL") {
+    auto log = std::make_shared<std::string>();
+    auto worker = sys.spawn(gh1299_worker, log);
+    scoped_actor self{sys};
+    self->send<message_priority::high>(worker, "hi there");
+    run();
+    self->send(worker, int32_t{123});
+    run();
+    CHECK_EQ(*log, "int: 123\nstring: hi there\n");
+  }
+  SUBTEST("NORMAL (skip) -> HIGH") {
+    auto log = std::make_shared<std::string>();
+    auto worker = sys.spawn(gh1299_worker, log);
+    scoped_actor self{sys};
+    self->send(worker, "hi there");
+    run();
+    self->send<message_priority::high>(worker, int32_t{123});
+    run();
+    CHECK_EQ(*log, "int: 123\nstring: hi there\n");
+  }
+}
+
+void gh1299_recv(scoped_actor& self, log_ptr log, int& tag) {
+  bool fin = false;
+  for (;;) {
+    if (tag == 0) {
+      self->receive(
+        [log, &tag](int32_t x) {
+          *log += "int: ";
+          *log += std::to_string(x);
+          *log += '\n';
+          tag = 1;
+        },
+        after(timespan{0}) >> [&fin] { fin = true; });
+      if (fin)
+        return;
+    } else {
+      self->receive(
+        [log, &tag](const std::string& x) {
+          *log += "string: ";
+          *log += x;
+          *log += '\n';
+          tag = 0;
+        },
+        after(timespan{0}) >> [&fin] { fin = true; });
+      if (fin)
+        return;
+    }
+  }
+}
+
+TEST_CASE("GH-1299 regression blocking") {
+  SUBTEST("HIGH (skip) -> NORMAL") {
+    auto log = std::make_shared<std::string>();
+    auto tag = 0;
+    scoped_actor sender{sys};
+    scoped_actor self{sys};
+    sender->send<message_priority::high>(self, "hi there");
+    gh1299_recv(self, log, tag);
+    sender->send(self, int32_t{123});
+    gh1299_recv(self, log, tag);
+    CHECK_EQ(*log, "int: 123\nstring: hi there\n");
+  }
+  SUBTEST("NORMAL (skip) -> HIGH") {
+    auto log = std::make_shared<std::string>();
+    auto tag = 0;
+    scoped_actor sender{sys};
+    scoped_actor self{sys};
+    sender->send(self, "hi there");
+    gh1299_recv(self, log, tag);
+    sender->send<message_priority::high>(self, int32_t{123});
+    gh1299_recv(self, log, tag);
+    CHECK_EQ(*log, "int: 123\nstring: hi there\n");
+  }
+}
+
+END_FIXTURE_SCOPE()

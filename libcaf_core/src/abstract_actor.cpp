@@ -17,7 +17,6 @@
 #include "caf/actor_system.hpp"
 #include "caf/config.hpp"
 #include "caf/default_attachable.hpp"
-#include "caf/detail/shared_spinlock.hpp"
 #include "caf/execution_unit.hpp"
 #include "caf/logger.hpp"
 #include "caf/mailbox_element.hpp"
@@ -41,9 +40,9 @@ void abstract_actor::on_destroy() {
   // nop
 }
 
-void abstract_actor::enqueue(strong_actor_ptr sender, message_id mid,
+bool abstract_actor::enqueue(strong_actor_ptr sender, message_id mid,
                              message msg, execution_unit* host) {
-  enqueue(make_mailbox_element(sender, mid, {}, std::move(msg)), host);
+  return enqueue(make_mailbox_element(sender, mid, {}, std::move(msg)), host);
 }
 
 abstract_actor::abstract_actor(actor_config& cfg)

@@ -23,19 +23,20 @@ message make(abstract_actor* self, const error& reason) {
 void default_attachable::actor_exited(const error& rsn, execution_unit* host) {
   CAF_ASSERT(observed_ != observer_);
   auto factory = type_ == monitor ? &make<down_msg> : &make<exit_msg>;
-  auto observer = actor_cast<strong_actor_ptr>(observer_);
-  auto observed = actor_cast<strong_actor_ptr>(observed_);
-  if (observer)
+
+  if (auto observer = actor_cast<strong_actor_ptr>(observer_)) {
+    auto observed = actor_cast<strong_actor_ptr>(observed_);
     observer->enqueue(std::move(observed), make_message_id(priority_),
                       factory(actor_cast<abstract_actor*>(observed_), rsn),
                       host);
+  }
 }
 
 bool default_attachable::matches(const token& what) {
   if (what.subtype != attachable::token::observer)
     return false;
-  auto& ot = *reinterpret_cast<const observe_token*>(what.ptr);
-  return ot.observer == observer_ && ot.type == type_;
+  auto& ref = *reinterpret_cast<const observe_token*>(what.ptr);
+  return ref.observer == observer_ && ref.type == type_;
 }
 
 default_attachable::default_attachable(actor_addr observed, actor_addr observer,

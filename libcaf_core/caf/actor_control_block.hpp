@@ -8,7 +8,6 @@
 
 #include "caf/config.hpp"
 #include "caf/detail/core_export.hpp"
-#include "caf/error.hpp"
 #include "caf/fwd.hpp"
 #include "caf/intrusive_ptr.hpp"
 #include "caf/node_id.hpp"
@@ -115,10 +114,10 @@ public:
     return nid;
   }
 
-  void enqueue(strong_actor_ptr sender, message_id mid, message content,
+  bool enqueue(strong_actor_ptr sender, message_id mid, message content,
                execution_unit* host);
 
-  void enqueue(mailbox_element_ptr what, execution_unit* host);
+  bool enqueue(mailbox_element_ptr what, execution_unit* host);
 
   /// @endcond
 };

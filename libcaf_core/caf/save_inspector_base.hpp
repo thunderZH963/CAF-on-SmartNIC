@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <string_view>
+#include <tuple>
+
 #include "caf/inspector_access.hpp"
 #include "caf/save_inspector.hpp"
 
@@ -24,8 +27,13 @@ public:
                                     type_name_or_anonymous<T>(), dptr()};
   }
 
-  constexpr auto virtual_object(string_view type_name) noexcept {
+  constexpr auto virtual_object(std::string_view type_name) noexcept {
     return super::object_t<Subtype>{invalid_type_id, type_name, dptr()};
+  }
+
+  template <class T>
+  bool begin_object_t() {
+    return dref().begin_object(type_id_v<T>, caf::type_name_v<T>);
   }
 
   template <class T>
@@ -65,6 +73,7 @@ public:
 
   template <class T, size_t... Is>
   bool tuple(const T& xs, std::index_sequence<Is...>) {
+    using std::get;
     return dref().begin_tuple(sizeof...(Is))             //
            && (detail::save(dref(), get<Is>(xs)) && ...) //
            && dref().end_tuple();
@@ -95,30 +104,6 @@ public:
   template <class Get, class Set>
   [[nodiscard]] bool apply(Get&& get, Set&&) {
     return detail::save(dref(), get());
-  }
-
-  // -- deprecated API: remove with CAF 0.19 -----------------------------------
-
-  template <class T>
-  [[deprecated("auto-conversion to underlying type is unsafe, add inspect")]] //
-  std::enable_if_t<std::is_enum<T>::value, bool>
-  opaque_value(T val) {
-    return dref().value(static_cast<std::underlying_type_t<T>>(val));
-  }
-
-  template <class T>
-  [[deprecated("use apply instead")]] bool apply_object(const T& x) {
-    return apply(x);
-  }
-
-  template <class... Ts>
-  [[deprecated("use apply instead")]] bool apply_objects(const Ts&... xs) {
-    return (apply(xs) && ...);
-  }
-
-  template <class T>
-  [[deprecated("use apply instead")]] bool apply_value(const T& x) {
-    return apply(x);
   }
 
 private:

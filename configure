@@ -21,6 +21,7 @@ General CMake options:
   --generator=STRING        set CMake generator (see cmake --help)
   --cxx-flags=STRING        set CMAKE_CXX_FLAGS when running CMake
   --prefix=PATH             set installation directory
+  --debug-postfix           set CMAKE_DEBUG_POSTFIX
 
 Locating packages in non-standard locations:
 
@@ -50,12 +51,13 @@ Convenience options:
 
 Flags (use --enable-<name> to activate and --disable-<name> to deactivate):
 
+  cpack                     build with CPack package description [OFF]
   shared-libs               build shared library targets [ON]
   export-compile-commands   write JSON compile commands database [ON]
   prefer-pthread-flag       prefer -pthread flag if available  [ON]
   curl-examples             build examples with libcurl [OFF]
   protobuf-examples         build examples with Google Protobuf [OFF]
-  qt5-examples              build examples with the Qt5 framework [OFF]
+  qt6-examples              build examples with the Qt6 framework [OFF]
   runtime-checks            build CAF with extra runtime assertions [OFF]
   utility-targets           include targets like consistency-check [OFF]
   actor-profiler            enable experimental proiler API [OFF]
@@ -96,12 +98,13 @@ append_cache_entry() {
 set_build_flag() {
   FlagName=''
   case "$1" in
+    cpack)                   FlagName='CAF_ENABLE_CPACK' ;;
     shared-libs)             FlagName='BUILD_SHARED_LIBS' ;;
     export-compile-commands) FlagName='CMAKE_EXPORT_COMPILE_COMMANDS' ;;
     prefer-pthread-flag)     FlagName='THREADS_PREFER_PTHREAD_FLAG' ;;
     curl-examples)           FlagName='CAF_ENABLE_CURL_EXAMPLES' ;;
     protobuf-examples)       FlagName='CAF_ENABLE_PROTOBUF_EXAMPLES' ;;
-    qt5-examples)            FlagName='CAF_ENABLE_QT5_EXAMPLES' ;;
+    qt6-examples)            FlagName='CAF_ENABLE_QT6_EXAMPLES' ;;
     runtime-checks)          FlagName='CAF_ENABLE_RUNTIME_CHECKS' ;;
     utility-targets)         FlagName='CAF_ENABLE_UTILITY_TARGETS' ;;
     actor-profiler)          FlagName='CAF_ENABLE_ACTOR_PROFILER' ;;
@@ -180,6 +183,9 @@ while [ $# -ne 0 ]; do
       ;;
     --openssl-root-dir=*)
       append_cache_entry OPENSSL_ROOT_DIR PATH "$optarg"
+      ;;
+    --debug-postfix=*)
+      append_cache_entry CMAKE_DEBUG_POSTFIX STRING "$optarg"
       ;;
     *)
       echo "Invalid option '$1'. Try $0 --help to see available options."

@@ -6,13 +6,12 @@
 
 #include "caf/detail/parser/read_timespan.hpp"
 
-#include "caf/test/dsl.hpp"
-
-#include <chrono>
+#include "core-test.hpp"
 
 #include "caf/parser_state.hpp"
-#include "caf/string_view.hpp"
-#include "caf/variant.hpp"
+
+#include <chrono>
+#include <string_view>
 
 using namespace caf;
 
@@ -50,22 +49,22 @@ struct timespan_consumer {
   timespan x;
 };
 
-optional<timespan> read(string_view str) {
+std::optional<timespan> read(std::string_view str) {
   timespan_consumer consumer;
   string_parser_state ps{str.begin(), str.end()};
   detail::parser::read_timespan(ps, consumer);
   if (ps.code != pec::success)
-    return none;
+    return std::nullopt;
   return consumer.x;
 }
 
 } // namespace
 
 CAF_TEST(todo) {
-  CAF_CHECK_EQUAL(read("12ns"), 12_ns);
-  CAF_CHECK_EQUAL(read("34us"), 34_us);
-  CAF_CHECK_EQUAL(read("56ms"), 56_ms);
-  CAF_CHECK_EQUAL(read("78s"), 78_s);
-  CAF_CHECK_EQUAL(read("60min"), 1_h);
-  CAF_CHECK_EQUAL(read("90h"), 90_h);
+  CHECK_EQ(read("12ns"), 12_ns);
+  CHECK_EQ(read("34us"), 34_us);
+  CHECK_EQ(read("56ms"), 56_ms);
+  CHECK_EQ(read("78s"), 78_s);
+  CHECK_EQ(read("60min"), 1_h);
+  CHECK_EQ(read("90h"), 90_h);
 }

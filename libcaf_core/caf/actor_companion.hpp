@@ -4,11 +4,7 @@
 
 #pragma once
 
-#include <functional>
-#include <memory>
-
 #include "caf/detail/core_export.hpp"
-#include "caf/detail/shared_spinlock.hpp"
 #include "caf/extend.hpp"
 #include "caf/fwd.hpp"
 #include "caf/mailbox_element.hpp"
@@ -16,6 +12,10 @@
 #include "caf/mixin/sender.hpp"
 #include "caf/mixin/subscriber.hpp"
 #include "caf/scheduled_actor.hpp"
+
+#include <functional>
+#include <memory>
+#include <shared_mutex>
 
 namespace caf {
 
@@ -45,9 +45,6 @@ public:
   /// Required by `spawn` for type deduction.
   using behavior_type = behavior;
 
-  /// A shared lockable.
-  using lock_type = detail::shared_spinlock;
-
   /// Delegates incoming messages to user-defined event loop.
   using enqueue_handler = std::function<void(mailbox_element_ptr)>;
 
@@ -62,9 +59,9 @@ public:
 
   // -- overridden functions ---------------------------------------------------
 
-  void enqueue(mailbox_element_ptr ptr, execution_unit* host) override;
+  bool enqueue(mailbox_element_ptr ptr, execution_unit* host) override;
 
-  void enqueue(strong_actor_ptr src, message_id mid, message content,
+  bool enqueue(strong_actor_ptr src, message_id mid, message content,
                execution_unit* eu) override;
 
   void launch(execution_unit* eu, bool lazy, bool hide) override;
@@ -92,7 +89,7 @@ private:
   on_exit_handler on_exit_;
 
   // guards access to handler_
-  lock_type lock_;
+  std::shared_mutex lock_;
 };
 
 } // namespace caf

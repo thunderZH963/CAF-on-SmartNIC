@@ -17,15 +17,15 @@
 
 namespace caf::io {
 
-void abstract_broker::enqueue(strong_actor_ptr src, message_id mid, message msg,
+bool abstract_broker::enqueue(strong_actor_ptr src, message_id mid, message msg,
                               execution_unit*) {
-  enqueue(make_mailbox_element(std::move(src), mid, {}, std::move(msg)),
-          backend_);
+  return enqueue(make_mailbox_element(std::move(src), mid, {}, std::move(msg)),
+                 backend_);
 }
 
-void abstract_broker::enqueue(mailbox_element_ptr ptr, execution_unit*) {
+bool abstract_broker::enqueue(mailbox_element_ptr ptr, execution_unit*) {
   CAF_PUSH_AID(id());
-  scheduled_actor::enqueue(std::move(ptr), backend_);
+  return scheduled_actor::enqueue(std::move(ptr), backend_);
 }
 
 void abstract_broker::launch(execution_unit* eu, bool lazy, bool hide) {
@@ -81,12 +81,12 @@ byte_buffer& abstract_broker::wr_buf(connection_handle hdl) {
 
 void abstract_broker::write(connection_handle hdl, size_t bs, const void* buf) {
   auto& out = wr_buf(hdl);
-  auto first = reinterpret_cast<const byte*>(buf);
+  auto first = reinterpret_cast<const std::byte*>(buf);
   auto last = first + bs;
   out.insert(out.end(), first, last);
 }
 
-void abstract_broker::write(connection_handle hdl, span<const byte> buf) {
+void abstract_broker::write(connection_handle hdl, span<const std::byte> buf) {
   write(hdl, buf.size(), buf.data());
 }
 
@@ -121,7 +121,7 @@ void abstract_broker::enqueue_datagram(datagram_handle hdl, byte_buffer buf) {
 
 void abstract_broker::write(datagram_handle hdl, size_t bs, const void* buf) {
   auto& out = wr_buf(hdl);
-  auto first = reinterpret_cast<const byte*>(buf);
+  auto first = reinterpret_cast<const std::byte*>(buf);
   auto last = first + bs;
   out.insert(out.end(), first, last);
 }
@@ -339,8 +339,8 @@ resumable::subtype_t abstract_broker::subtype() const {
   return io_actor;
 }
 
-resumable::resume_result
-abstract_broker::resume(execution_unit* ctx, size_t mt) {
+resumable::resume_result abstract_broker::resume(execution_unit* ctx,
+                                                 size_t mt) {
   CAF_ASSERT(ctx != nullptr);
   CAF_ASSERT(ctx == backend_);
   return scheduled_actor::resume(ctx, mt);
