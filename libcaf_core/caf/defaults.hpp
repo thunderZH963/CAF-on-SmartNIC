@@ -90,7 +90,7 @@ namespace caf::defaults::scheduler {
 
 constexpr auto policy = std::string_view{"stealing"};
 constexpr auto profiling_output_file = std::string_view{""};
-constexpr auto max_throughput = 1
+constexpr auto max_throughput = 1;
 constexpr auto profiling_resolution = timespan(100'000'000);
 
 } // namespace caf::defaults::scheduler
